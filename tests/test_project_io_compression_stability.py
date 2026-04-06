@@ -75,7 +75,40 @@ def test_plain_json_backward_compatible_for_large_project(tmp_path: Path) -> Non
 def test_autosave_recovery_reads_compressed_file(tmp_path: Path, monkeypatch, qtbot) -> None:
     monkeypatch.setattr("src.services.autosave.Path.home", lambda: tmp_path)
 
-    class _FakeSettings:
+    class _FakeSettingsManager:
+        def __init__(self):
+            self._store = {}
+
+        def get_autosave_interval(self) -> int:
+            return int(self._store.get("autosave/interval", 30))
+
+        def set_autosave_interval(self, seconds: int) -> None:
+            self._store["autosave/interval"] = int(seconds)
+
+        def get_autosave_idle_timeout(self) -> int:
+            return int(self._store.get("autosave/idle_timeout", 5))
+
+        def set_autosave_idle_timeout(self, seconds: int) -> None:
+            self._store["autosave/idle_timeout"] = int(seconds)
+
+        def get_recent_files_max(self) -> int:
+            return int(self._store.get("recent/max_files", 10))
+
+        def get_recent_files(self) -> list[str]:
+            return list(self._store.get("recent/files", []))
+
+        def set_recent_files(self, paths: list[str]) -> None:
+            self._store["recent/files"] = list(paths)
+
+        def clear_recent_files(self) -> None:
+            self._store["recent/files"] = []
+
+    def _make_settings_manager():
+        return _FakeSettingsManager()
+
+    monkeypatch.setattr("src.services.autosave.SettingsManager", _make_settings_manager)
+
+    class _LegacyQSettings:
         def __init__(self):
             self._store = {}
 
@@ -85,7 +118,7 @@ def test_autosave_recovery_reads_compressed_file(tmp_path: Path, monkeypatch, qt
         def setValue(self, key, value):
             self._store[key] = value
 
-    monkeypatch.setattr("src.services.autosave.QSettings", _FakeSettings)
+    monkeypatch.setattr("src.services.settings_manager.QSettings", _LegacyQSettings)
 
     manager = AutoSaveManager()
     manager._timer.stop()

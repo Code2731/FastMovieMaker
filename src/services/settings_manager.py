@@ -1,12 +1,14 @@
 """Settings manager for application preferences."""
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Optional
 
 from PySide6.QtCore import QSettings
 
+from src.services.zvec_state_store import ZvecStateStore, _normalize_sync_state
 from src.utils.config import TTSEngine
 
 # 커스터마이징 가능한 단축키 기본값
@@ -32,6 +34,15 @@ class SettingsManager:
 
     def __init__(self):
         self._settings = QSettings()
+        self._logger = logging.getLogger(__name__)
+        self._state_store: ZvecStateStore | None = None
+        self._init_state_store()
+        self._migrate_legacy_state_once()
+
+    def __del__(self) -> None:
+        store = getattr(self, "_state_store", None)
+        if store is not None and hasattr(store, "close"):
+            store.close()
 
     # ---------------------------------------------------- General Settings
 
@@ -265,20 +276,59 @@ class SettingsManager:
 
     def get_project_sync_state(self) -> dict[str, dict[str, str]]:
         """Get per-project sync state map."""
-        raw_value = self._settings.value("project_sync/state", "{}", str)
-        if isinstance(raw_value, dict):
-            return self._normalize_sync_state(raw_value)
-        try:
-            parsed = json.loads(str(raw_value))
-        except Exception:
-            return {}
-        return self._normalize_sync_state(parsed)
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                return _normalize_sync_state(store.get_sync_state_map())
+            except Exception as exc:
+                self._logger.warning("Failed to read sync state from zvec store: %s", exc)
+        return self._read_legacy_sync_state()
 
     def set_project_sync_state(self, state: dict[str, dict[str, str]]) -> None:
         """Set per-project sync state map."""
-        normalized = self._normalize_sync_state(state)
+        normalized = _normalize_sync_state(state)
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                store.set_sync_state_map(normalized)
+                return
+            except Exception as exc:
+                self._logger.warning("Failed to write sync state to zvec store: %s", exc)
         payload = json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
         self._settings.setValue("project_sync/state", payload)
+
+    def get_recent_files(self) -> list[str]:
+        """Get recent project file paths."""
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                return self._normalize_path_list(store.get_recent_files())
+            except Exception as exc:
+                self._logger.warning("Failed to read recent files from zvec store: %s", exc)
+        return self._normalize_path_list(self._settings.value("recent/files", []))
+
+    def set_recent_files(self, paths: list[str]) -> None:
+        """Set recent project file paths."""
+        normalized = self._normalize_path_list(paths)
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                store.set_recent_files(normalized)
+                return
+            except Exception as exc:
+                self._logger.warning("Failed to write recent files to zvec store: %s", exc)
+        self._settings.setValue("recent/files", normalized)
+
+    def clear_recent_files(self) -> None:
+        """Clear recent project file paths."""
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                store.clear_recent_files()
+                return
+            except Exception as exc:
+                self._logger.warning("Failed to clear recent files in zvec store: %s", exc)
+        self._settings.setValue("recent/files", [])
 
     # ---------------------------------------------------- Shortcut Settings
 
@@ -309,19 +359,51 @@ class SettingsManager:
             return out
         return []
 
-    @staticmethod
-    def _normalize_sync_state(value: Any) -> dict[str, dict[str, str]]:
-        if not isinstance(value, dict):
+    def _init_state_store(self) -> None:
+        self._state_store = ZvecStateStore()
+        if not self._state_store.available:
+            self._logger.warning("zvec state store unavailable: %s", self._state_store.error)
+            self._state_store = None
+
+    def _get_state_store(self) -> ZvecStateStore | None:
+        return getattr(self, "_state_store", None)
+
+    def _read_legacy_sync_state(self) -> dict[str, dict[str, str]]:
+        raw_value = self._settings.value("project_sync/state", "{}", str)
+        if isinstance(raw_value, dict):
+            return _normalize_sync_state(raw_value)
+        try:
+            parsed = json.loads(str(raw_value))
+        except Exception:
             return {}
-        out: dict[str, dict[str, str]] = {}
-        for raw_key, raw_entry in value.items():
-            key = str(raw_key).strip()
-            if not key or not isinstance(raw_entry, dict):
-                continue
-            last_hash = str(raw_entry.get("last_hash", "")).strip()
-            updated_at = str(raw_entry.get("updated_at", "")).strip()
-            out[key] = {
-                "last_hash": last_hash,
-                "updated_at": updated_at,
-            }
-        return out
+        return _normalize_sync_state(parsed)
+
+    def _migrate_legacy_state_once(self) -> None:
+        store = self._get_state_store()
+        if store is None:
+            return
+        flag_key = "state_store/zvec_migration_v1_done"
+        if bool(self._settings.value(flag_key, False, bool)):
+            return
+        try:
+            db_recent = self._normalize_path_list(store.get_recent_files())
+            legacy_recent = self._normalize_path_list(self._settings.value("recent/files", []))
+            if legacy_recent and not db_recent:
+                store.set_recent_files(legacy_recent)
+
+            db_state = _normalize_sync_state(store.get_sync_state_map())
+            legacy_state = self._read_legacy_sync_state()
+            if legacy_state:
+                merged = dict(db_state)
+                changed = False
+                for key, entry in legacy_state.items():
+                    if key in merged:
+                        continue
+                    merged[key] = entry
+                    changed = True
+                if changed:
+                    store.set_sync_state_map(merged)
+
+            self._settings.setValue(flag_key, True)
+        except Exception as exc:
+            self._logger.warning("Failed to migrate legacy state to zvec store: %s", exc)

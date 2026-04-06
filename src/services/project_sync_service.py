@@ -59,6 +59,12 @@ class ProjectSyncBackend(Protocol):
     def describe(self, file_key: str) -> SyncFileInfo | None:
         """Return file summary info for file key."""
 
+    def prepare_remote_sync(self) -> None:
+        """Run optional pre-sync lifecycle hook."""
+
+    def finalize_remote_sync_if_needed(self, file_key: str) -> None:
+        """Run optional post-sync lifecycle hook."""
+
 
 @dataclass(slots=True)
 class SyncResult:
@@ -98,6 +104,12 @@ class FileSystemSyncBackend:
         payload = path.read_bytes()
         return _file_info(path, _hash_bytes(payload))
 
+    def prepare_remote_sync(self) -> None:
+        """Filesystem backend has no remote pre-sync action."""
+
+    def finalize_remote_sync_if_needed(self, file_key: str) -> None:
+        """Filesystem backend has no remote finalize action."""
+
     def _target_path(self, file_key: str) -> Path:
         return self._root_path / Path(file_key).name
 
@@ -106,7 +118,11 @@ class GitSyncBackend:
     """Git working-tree sync backend.
 
     This backend stores sync files under `.fmm_sync_store/` in a local git repo.
-    It does not push/pull remotes in this phase.
+    Cloud Sync 3 policy:
+    - remote target: `origin` + current branch
+    - sync is blocked when repo is dirty
+    - pull uses `--ff-only` only
+    - sync file updates are auto-committed then pushed
     """
 
     def __init__(self, repo_path: Path, store_dir: str = ".fmm_sync_store") -> None:
@@ -125,14 +141,6 @@ class GitSyncBackend:
         path = self._target_path(file_key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(payload)
-        rel_path = path.relative_to(self._repo_path)
-        cmd = ["git", "-C", str(self._repo_path), "add", str(rel_path)]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True)
-        except OSError as exc:
-            raise RuntimeError("Git is not available.") from exc
-        if proc.returncode != 0:
-            raise RuntimeError("Failed to stage sync file in git repository.")
 
     def describe(self, file_key: str) -> SyncFileInfo | None:
         self._validate_repo()
@@ -148,13 +156,73 @@ class GitSyncBackend:
     def _validate_repo(self) -> None:
         if not self._repo_path.is_dir():
             raise RuntimeError("Git sync repository is unavailable.")
-        cmd = ["git", "-C", str(self._repo_path), "rev-parse", "--is-inside-work-tree"]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True)
-        except OSError as exc:
-            raise RuntimeError("Git is not available.") from exc
+        proc = self._run_git(["rev-parse", "--is-inside-work-tree"])
         if proc.returncode != 0:
             raise RuntimeError("Git sync repository is invalid.")
+
+    def prepare_remote_sync(self) -> None:
+        """Synchronize local git working tree with origin/current-branch."""
+        self._validate_repo()
+        branch = self._current_branch()
+        self._require_clean_worktree()
+        if self._run_git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).returncode != 0:
+            raise RuntimeError("Git upstream is not configured for current branch.")
+        if self._run_git(["remote", "get-url", "origin"]).returncode != 0:
+            raise RuntimeError("Git remote 'origin' is not configured.")
+        if self._run_git(["fetch", "origin", branch]).returncode != 0:
+            raise RuntimeError("Failed to fetch from origin.")
+        if self._run_git(["pull", "--ff-only", "origin", branch]).returncode != 0:
+            raise RuntimeError("Failed to pull from origin with ff-only policy.")
+
+    def finalize_remote_sync_if_needed(self, file_key: str) -> None:
+        """Auto-commit/push sync store changes for the target project file."""
+        self._validate_repo()
+        branch = self._current_branch()
+        rel_path = self._target_path(file_key).relative_to(self._repo_path)
+
+        status = self._run_git(["status", "--porcelain", "--", str(rel_path)])
+        if status.returncode != 0:
+            raise RuntimeError("Failed to inspect git sync file status.")
+        if not status.stdout.strip():
+            return
+
+        if self._run_git(["add", "--", str(rel_path)]).returncode != 0:
+            raise RuntimeError("Failed to stage sync file in git repository.")
+
+        commit = self._run_git(["commit", "-m", f"sync: update {Path(file_key).name}", "--", str(rel_path)])
+        if commit.returncode != 0:
+            stdout = (commit.stdout or "").lower()
+            stderr = (commit.stderr or "").lower()
+            if "nothing to commit" not in stdout and "nothing to commit" not in stderr:
+                raise RuntimeError("Failed to commit sync file in git repository.")
+
+        if self._run_git(["push", "origin", branch]).returncode != 0:
+            raise RuntimeError("Failed to push sync commit to origin.")
+
+    def _current_branch(self) -> str:
+        result = self._run_git(["rev-parse", "--abbrev-ref", "HEAD"])
+        if result.returncode != 0:
+            raise RuntimeError("Failed to resolve current git branch.")
+        branch = result.stdout.strip()
+        if not branch or branch == "HEAD":
+            raise RuntimeError("Git sync requires an active branch checkout.")
+        return branch
+
+    def _require_clean_worktree(self) -> None:
+        result = self._run_git(["status", "--porcelain"])
+        if result.returncode != 0:
+            raise RuntimeError("Failed to inspect git repository status.")
+        if result.stdout.strip():
+            raise RuntimeError("Git sync requires a clean working tree.")
+
+    def _run_git(self, args: list[str]) -> subprocess.CompletedProcess[str]:
+        cmd = ["git", "-C", str(self._repo_path), *args]
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"Git command timed out: {args}") from exc
+        except OSError as exc:
+            raise RuntimeError("Git is not available.") from exc
 
 
 class ProjectSyncService:
@@ -179,6 +247,15 @@ class ProjectSyncService:
         backend_obj, backend_error = self._resolve_backend(sync_root, backend)
         if backend_obj is None:
             return SyncResult(SyncResultCode.ERROR, backend_error or "Sync backend is unavailable.", file_key)
+        try:
+            backend_obj.prepare_remote_sync()
+        except Exception as exc:
+            return SyncResult(
+                SyncResultCode.ERROR,
+                "Failed to prepare remote git sync.",
+                file_key,
+                str(exc),
+            )
 
         state_map = self._settings.get_project_sync_state()
         last_hash = self._last_hash_for(state_map, file_key)
@@ -309,7 +386,6 @@ class ProjectSyncService:
                 local_info=local_info,
             )
         local_hash = _hash_bytes(local_bytes)
-        self._store_last_hash(state_map, file_key, local_hash)
         if local_info is None:
             local_info = _file_info(project_path, local_hash)
         try:
@@ -322,6 +398,18 @@ class ProjectSyncService:
                 str(exc),
                 local_info=local_info,
             )
+        try:
+            backend.finalize_remote_sync_if_needed(file_key)
+        except Exception as exc:
+                return SyncResult(
+                    SyncResultCode.ERROR,
+                    "Failed to push synced project to remote git.",
+                    file_key,
+                    str(exc),
+                    local_info=local_info,
+                    remote_info=remote_info,
+                )
+        self._store_last_hash(state_map, file_key, local_hash)
         return SyncResult(
             SyncResultCode.SUCCESS,
             "Project sync completed.",

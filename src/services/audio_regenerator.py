@@ -26,6 +26,9 @@ class AudioRegenerator:
         apply_segment_volumes: bool = True,
         ducking_enabled: bool = False,
         duck_level: float = 0.3,
+        duck_attack_ms: int = 120,
+        duck_release_ms: int = 240,
+        duck_merge_gap_ms: int = 150,
     ) -> tuple[Path, int]:
         """
         Regenerate merged audio file based on current segment timing.
@@ -39,6 +42,9 @@ class AudioRegenerator:
             apply_segment_volumes: Whether to apply per-segment volume settings
             ducking_enabled: If True, automatically lower BGM volume during TTS segments
             duck_level: BGM volume multiplier during TTS segments (0.0-1.0, default 0.3)
+            duck_attack_ms: Fade-down duration for ducking start.
+            duck_release_ms: Fade-up duration for ducking end.
+            duck_merge_gap_ms: Merge adjacent ducking windows if the gap is <= this value.
 
         Returns:
             tuple[Path, int]: (output_path, total_duration_ms)
@@ -80,6 +86,9 @@ class AudioRegenerator:
                         segments=track.segments,
                         base_volume=bg_volume,
                         duck_volume=duck_level,
+                        attack_ms=duck_attack_ms,
+                        release_ms=duck_release_ms,
+                        merge_gap_ms=duck_merge_gap_ms,
                     )
 
                 AudioMerger.mix_audio_tracks(
@@ -123,6 +132,7 @@ class AudioRegenerator:
         if not runner.is_available():
             raise RuntimeError("FFmpeg not found")
 
+        pitch_shift_enabled = SettingsManager().get_audio_speed_pitch_shift()
         sorted_segments = sorted(segments, key=lambda s: s.start_ms)
 
         silence_file = temp_dir / "silence.mp3"
@@ -172,26 +182,20 @@ class AudioRegenerator:
             if seg.audio_file and Path(seg.audio_file).exists():
                 audio_file_path = seg.audio_file
                 
-                # 속도 및 볼륨 처리 필요 여부 확인
                 has_speed = hasattr(seg, 'speed') and seg.speed is not None and seg.speed != 1.0
                 has_volume = apply_segment_volumes and hasattr(seg, 'volume') and seg.volume != 1.0
-                
+
                 if has_speed or has_volume:
                     processed_file = temp_dir / f"proc_{i}.mp3"
                     filters = []
-                    
-                    # 1. 볼륨 필터 추가
+
                     if has_volume:
                         filters.append(f"volume={seg.volume:.2f}")
-                    
-                    # 2. 속도 필터 추가
-                    settings = SettingsManager()
-                    pitch_shift_enabled = settings.get_audio_speed_pitch_shift()
 
                     if has_speed:
                         if pitch_shift_enabled:
-                            filters.append(f"asetpts=PTS/{seg.speed:.3f}") # Change audio timing and pitch
-                        else: # Pitch-preserving
+                            filters.append(f"asetpts=PTS/{seg.speed:.3f}")
+                        else:
                             s = seg.speed
                             while s > 2.0:
                                 filters.append("atempo=2.0")
@@ -247,6 +251,7 @@ class AudioRegenerator:
         log_ffmpeg_command(merge_args)
         result = runner.run(merge_args)
         if result.returncode != 0:
+            # Stream-copy failed (e.g. codec mismatch); re-encode once as fallback.
             fallback_args = [
                 "-f", "concat",
                 "-safe", "0",

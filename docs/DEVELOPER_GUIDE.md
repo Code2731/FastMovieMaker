@@ -31,6 +31,8 @@ python3 main.py
 - 프로젝트 동기화는 backend 추상화 기반으로 동작하며 `filesystem`(sync folder) / `git`(local repo) 백엔드를 지원합니다.
 - 기본 UX는 수동 실행(`File > Sync Now`)이며, `auto_push_on_save` 옵션이 켜진 경우 저장 직후 선택적 자동 push를 수행합니다.
 - 동기화 기본 흐름은 `Pull(원격 변경 반영) → 충돌 검사 → Push(로컬 반영)`이며 충돌은 자동 병합하지 않고 `Use Local/Use Remote/Cancel` 선택으로만 처리합니다.
+- Git backend(Cloud Sync 3)는 `origin + 현재 브랜치`만 사용하며 sync 시작 전 clean working tree를 강제합니다.
+- Git backend pull은 `--ff-only`만 허용하고, `.fmm_sync_store/<project>` 변경분만 자동 commit/push 합니다.
 - 충돌 다이얼로그는 로컬/원격 요약(수정시각, 파일크기, 해시 축약값)을 표시하며, 컨트롤러는 `SyncResult` 구조화 필드(`local_info`, `remote_info`, `conflict_reason`)만 사용해 분기합니다.
 
 ## 브랜치 및 커밋 규칙
@@ -79,6 +81,11 @@ python3 scripts/benchmark_project_io.py --segments 2000 --iterations 3 --text-le
 pytest tests/test_project_sync_service.py -v
 pytest tests/test_project_controller_sync.py -v
 pytest tests/test_project_sync_backends.py -v
+
+# 오디오 더킹 스무딩 회귀 테스트
+pytest tests/test_ducking_service.py -v
+pytest tests/test_audio_regenerator_integration.py -v
+QT_QPA_PLATFORM=offscreen pytest tests/test_export_dialog_status.py -v
 ```
 
 APV 스모크 결과 해석:
@@ -118,9 +125,11 @@ base64 -i /path/to/sample_apv.mov | tr -d '\n'
 - `save_ms_avg`/`load_ms_avg`: 로컬 반복 비교용 지표(절대값보다 이전 대비 회귀 여부를 우선 확인)
 - 운영/CI에서는 동일 옵션(`--segments 2000 --iterations 3 --text-length 80`)으로 비교
 
-Cloud Sync 수동 체크리스트(MVP + 2단계):
+Cloud Sync 수동 체크리스트(MVP + 2/3단계):
 - backend=`filesystem`: 기존 sync folder 경로로 no-op/pull/push/conflict 동작 확인
 - backend=`git`: 로컬 Git repo 경로에서 동일 동작 확인(`.fmm_sync_store/<project_file>`)
+- backend=`git`(원격): `origin`/upstream 설정 + clean worktree 상태에서만 sync 허용 확인
+- backend=`git`(원격): `pull --ff-only` 실패 시 `Sync Failed`로 차단되는지 확인
 - `Auto Push On Save` 켠 상태에서 저장 시 자동 push 시도(실패해도 저장은 성공 유지) 확인
 - 동일 파일 no-op: `Sync Now` 후 "already up to date" 상태 확인
 - 원격 선행 변경 pull: sync root 파일만 수정 후 `Sync Now` 시 로컬 반영 확인

@@ -138,6 +138,8 @@ STRINGS: dict[str, str] = {
     "Failed to read synced project file.": "동기화 프로젝트 파일을 읽지 못했습니다.",
     "Failed to sync local file to sync folder.": "로컬 파일을 동기화 폴더로 복사하지 못했습니다.",
     "Failed to apply synced file to local project.": "동기화 파일을 로컬 프로젝트에 적용하지 못했습니다.",
+    "Failed to prepare remote git sync.": "원격 Git 동기화 준비에 실패했습니다.",
+    "Failed to push synced project to remote git.": "동기화 프로젝트를 원격 Git으로 푸시하지 못했습니다.",
     "Failed to save project before sync.": "동기화 전에 프로젝트를 저장하지 못했습니다.",
     "Auto sync failed after save.": "저장 후 자동 동기화에 실패했습니다.",
     "Git sync repository is not configured.": "Git 동기화 저장소가 설정되지 않았습니다.",
@@ -222,6 +224,8 @@ STRINGS: dict[str, str] = {
     "BGM Ducking": "BGM 덕킹",
     "Enable Auto-Ducking": "자동 덕킹 활성화",
     "Duck Level:": "덕킹 레벨:",
+    "Attack (ms):": "어택 (ms):",
+    "Release (ms):": "릴리즈 (ms):",
     "Use Hardware Acceleration (GPU)": "하드웨어 가속 (GPU) 사용",
     "Hardware acceleration is available on this system.": "이 시스템에서 하드웨어 가속을 사용할 수 있습니다.",
     "No hardware encoder detected.": "사용 가능한 하드웨어 인코더를 찾지 못했습니다.",
@@ -760,7 +764,7 @@ STRINGS: dict[str, str] = {
     "Apply Corrections": "보정 적용",
     "Apply TTS verification": "TTS 검증 적용",
     "Verification Error": "검증 오류",
-    "활성 트랙의 TTS 오디오를 Whisper로 재전사합니다.\n원본 자막의 타이밍이 실제 발화에 맞게 자동 보정됩니다.":
+    "Re-transcribes the active track's TTS audio with Whisper.\nSubtitle timing is automatically adjusted to match actual speech.":
         "활성 트랙의 TTS 오디오를 Whisper로 재전사합니다.\n원본 자막의 타이밍이 실제 발화에 맞게 자동 보정됩니다.",
     "%d segments corrected": "%d개 세그먼트 보정됨",
     "TTS audio file not found": "TTS 오디오 파일을 찾을 수 없음",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -193,7 +194,7 @@ def test_sync_supports_explicit_filesystem_backend(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(not _git_available(), reason="git is not available")
-def test_sync_uses_git_backend_from_settings(tmp_path: Path) -> None:
+def test_sync_uses_git_backend_from_settings(tmp_path: Path, monkeypatch) -> None:
     local = tmp_path / "sample.fmm.json"
     local.write_text('{"a":1}', encoding="utf-8")
     repo = tmp_path / "sync_repo"
@@ -204,6 +205,8 @@ def test_sync_uses_git_backend_from_settings(tmp_path: Path) -> None:
     settings.sync_backend = "git"
     settings.sync_git_repo_path = str(repo)
     svc = ProjectSyncService(settings=settings)  # type: ignore[arg-type]
+    monkeypatch.setattr(GitSyncBackend, "prepare_remote_sync", lambda self: None)
+    monkeypatch.setattr(GitSyncBackend, "finalize_remote_sync_if_needed", lambda self, file_key: None)
 
     first = svc.sync(local)
     assert first.code == SyncResultCode.SUCCESS
@@ -212,3 +215,94 @@ def test_sync_uses_git_backend_from_settings(tmp_path: Path) -> None:
     local.write_text('{"a":2}', encoding="utf-8")
     second = svc.sync(local)
     assert second.code == SyncResultCode.SUCCESS
+
+
+class _StubBackend:
+    def __init__(self, remote_payload: bytes | None = None, fail_prepare: bool = False) -> None:
+        self.remote_payload = remote_payload
+        self.fail_prepare = fail_prepare
+        self.prepare_calls = 0
+        self.finalize_calls = 0
+
+    def fetch(self, file_key: str) -> bytes | None:
+        return self.remote_payload
+
+    def store(self, file_key: str, payload: bytes) -> None:
+        self.remote_payload = payload
+
+    def describe(self, file_key: str):  # noqa: ANN001
+        if self.remote_payload is None:
+            return None
+        path = Path("/tmp") / file_key
+        return type("Info", (), {
+            "path": str(path),
+            "size_bytes": len(self.remote_payload),
+            "modified_at": "2026-03-10T00:00:00+00:00",
+            "sha256": "x" * 64,
+        })()
+
+    def prepare_remote_sync(self) -> None:
+        self.prepare_calls += 1
+        if self.fail_prepare:
+            raise RuntimeError("prepare failed")
+
+    def finalize_remote_sync_if_needed(self, file_key: str) -> None:
+        self.finalize_calls += 1
+
+
+def test_sync_calls_prepare_and_finalize_for_push(tmp_path: Path) -> None:
+    local = tmp_path / "sample.fmm.json"
+    local.write_text('{"a":1}', encoding="utf-8")
+    settings = _FakeSettings()
+    svc = ProjectSyncService(settings=settings)  # type: ignore[arg-type]
+    backend = _StubBackend(remote_payload=None)
+
+    result = svc.sync(local, backend=backend)
+
+    assert result.code == SyncResultCode.SUCCESS
+    assert backend.prepare_calls == 1
+    assert backend.finalize_calls == 1
+
+
+def test_sync_calls_prepare_but_skips_finalize_on_no_changes(tmp_path: Path) -> None:
+    local = tmp_path / "sample.fmm.json"
+    local.write_text('{"a":1}', encoding="utf-8")
+    settings = _FakeSettings()
+    svc = ProjectSyncService(settings=settings)  # type: ignore[arg-type]
+    backend = _StubBackend(remote_payload=b'{"a":1}')
+
+    result = svc.sync(local, backend=backend)
+
+    assert result.code == SyncResultCode.NO_CHANGES
+    assert backend.prepare_calls == 1
+    assert backend.finalize_calls == 0
+
+
+def test_sync_use_remote_skips_finalize(tmp_path: Path) -> None:
+    local = tmp_path / "sample.fmm.json"
+    base_text = '{"base":1}'
+    local.write_text(base_text, encoding="utf-8")
+    settings = _FakeSettings()
+    settings.state["sample.fmm.json"] = {"last_hash": hashlib.sha256(base_text.encode("utf-8")).hexdigest()}
+    svc = ProjectSyncService(settings=settings)  # type: ignore[arg-type]
+    backend = _StubBackend(remote_payload=b'{"remote":2}')
+
+    result = svc.sync(local, backend=backend)
+
+    assert result.code == SyncResultCode.SUCCESS
+    assert backend.prepare_calls == 1
+    assert backend.finalize_calls == 0
+    assert local.read_text(encoding="utf-8") == '{"remote":2}'
+
+
+def test_sync_returns_error_when_prepare_remote_sync_fails(tmp_path: Path) -> None:
+    local = tmp_path / "sample.fmm.json"
+    local.write_text('{"a":1}', encoding="utf-8")
+    settings = _FakeSettings()
+    svc = ProjectSyncService(settings=settings)  # type: ignore[arg-type]
+    backend = _StubBackend(fail_prepare=True)
+
+    result = svc.sync(local, backend=backend)
+
+    assert result.code == SyncResultCode.ERROR
+    assert result.message == "Failed to prepare remote git sync."

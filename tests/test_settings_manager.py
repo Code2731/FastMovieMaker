@@ -20,7 +20,29 @@ class _FakeQSettings:
 def _make_manager() -> SettingsManager:
     mgr = SettingsManager.__new__(SettingsManager)
     mgr._settings = _FakeQSettings()
+    mgr._state_store = None
     return mgr
+
+
+class _FakeStateStore:
+    def __init__(self):
+        self._recent: list[str] = []
+        self._state: dict[str, dict[str, str]] = {}
+
+    def get_recent_files(self) -> list[str]:
+        return list(self._recent)
+
+    def set_recent_files(self, paths: list[str]) -> None:
+        self._recent = list(paths)
+
+    def clear_recent_files(self) -> None:
+        self._recent = []
+
+    def get_sync_state_map(self) -> dict[str, dict[str, str]]:
+        return dict(self._state)
+
+    def set_sync_state_map(self, state: dict[str, dict[str, str]]) -> None:
+        self._state = dict(state)
 
 
 def test_tts_default_provider_roundtrip() -> None:
@@ -120,3 +142,83 @@ def test_project_sync_state_roundtrip_and_normalize() -> None:
 
     mgr._settings.setValue("project_sync/state", "not-json")
     assert mgr.get_project_sync_state() == {}
+
+
+def test_recent_files_roundtrip_with_state_store() -> None:
+    mgr = _make_manager()
+    mgr._state_store = _FakeStateStore()
+
+    mgr.set_recent_files(["/tmp/a.fmm", "/tmp/b.fmm"])
+    assert mgr.get_recent_files() == ["/tmp/a.fmm", "/tmp/b.fmm"]
+
+    mgr.clear_recent_files()
+    assert mgr.get_recent_files() == []
+
+
+def test_project_sync_state_roundtrip_with_state_store() -> None:
+    mgr = _make_manager()
+    mgr._state_store = _FakeStateStore()
+    state = {
+        "demo.fmm.json": {
+            "last_hash": "abc123",
+            "updated_at": "2026-03-13T00:00:00+00:00",
+        }
+    }
+    mgr.set_project_sync_state(state)
+    assert mgr.get_project_sync_state() == state
+
+
+def test_migrate_legacy_state_once(monkeypatch) -> None:
+    from src.services import settings_manager as settings_mod
+
+    fake_qsettings = _FakeQSettings()
+    fake_qsettings.setValue("recent/files", ["/tmp/legacy_a.fmm", "/tmp/legacy_b.fmm"])
+    fake_qsettings.setValue(
+        "project_sync/state",
+        '{"demo.fmm.json":{"last_hash":"legacy_hash","updated_at":"legacy_time"}}',
+    )
+
+    class _MigratingStore:
+        def __init__(self):
+            self.available = True
+            self.error = ""
+            self.recent = ["/tmp/existing.fmm"]
+            self.state = {
+                "demo.fmm.json": {
+                    "last_hash": "db_hash",
+                    "updated_at": "db_time",
+                }
+            }
+
+        def get_recent_files(self) -> list[str]:
+            return list(self.recent)
+
+        def set_recent_files(self, paths: list[str]) -> None:
+            self.recent = list(paths)
+
+        def clear_recent_files(self) -> None:
+            self.recent = []
+
+        def get_sync_state_map(self) -> dict[str, dict[str, str]]:
+            return dict(self.state)
+
+        def set_sync_state_map(self, state: dict[str, dict[str, str]]) -> None:
+            self.state = dict(state)
+
+    store = _MigratingStore()
+    monkeypatch.setattr(settings_mod, "QSettings", lambda: fake_qsettings)
+    monkeypatch.setattr(settings_mod, "ZvecStateStore", lambda: store)
+
+    mgr = settings_mod.SettingsManager()
+    assert mgr.get_recent_files() == ["/tmp/existing.fmm"]
+    assert mgr.get_project_sync_state()["demo.fmm.json"]["last_hash"] == "db_hash"
+    assert fake_qsettings.value("state_store/zvec_migration_v1_done", False, bool) is True
+
+    fake_qsettings.setValue("recent/files", ["/tmp/new_legacy.fmm"])
+    fake_qsettings.setValue(
+        "project_sync/state",
+        '{"new_demo.fmm.json":{"last_hash":"new_hash","updated_at":"new_time"}}',
+    )
+    mgr2 = settings_mod.SettingsManager()
+    assert mgr2.get_recent_files() == ["/tmp/existing.fmm"]
+    assert "new_demo.fmm.json" not in mgr2.get_project_sync_state()

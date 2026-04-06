@@ -86,3 +86,78 @@ class TestAudioRegeneratorIntegration:
                 volume_1_0_called = True
                 
         assert not volume_1_0_called, "FFmpeg volume filter should not be called for volume 1.0"
+
+    @patch("src.services.audio_merger.AudioMerger.mix_audio_tracks")
+    @patch("src.services.ducking_service.DuckingService.build_volume_expr")
+    def test_regenerate_track_audio_passes_ducking_smoothing_params(
+        self,
+        mock_build_expr,
+        mock_mix_audio_tracks,
+        mock_ffmpeg_runner,
+        tmp_path,
+    ):
+        """Ducking enabled path should forward attack/release/merge parameters."""
+        track = SubtitleTrack()
+        audio1 = tmp_path / "seg1.mp3"
+        audio1.write_text("dummy audio content 1", encoding="utf-8")
+        seg1 = SubtitleSegment(0, 1000, "Segment 1", audio_file=str(audio1), volume=1.0)
+        track.add_segment(seg1)
+
+        mock_build_expr.return_value = "if(gt(between(t,0.000,1.000),0),0.300,0.800)"
+        output_path = tmp_path / "output_duck.mp3"
+        bg_audio = tmp_path / "bg.mp3"
+        bg_audio.write_text("bg", encoding="utf-8")
+
+        AudioRegenerator.regenerate_track_audio(
+            track=track,
+            output_path=output_path,
+            video_audio_path=bg_audio,
+            ducking_enabled=True,
+            duck_level=0.3,
+            duck_attack_ms=120,
+            duck_release_ms=240,
+            duck_merge_gap_ms=150,
+        )
+
+        mock_build_expr.assert_called_once()
+        build_kwargs = mock_build_expr.call_args.kwargs
+        assert build_kwargs["attack_ms"] == 120
+        assert build_kwargs["release_ms"] == 240
+        assert build_kwargs["merge_gap_ms"] == 150
+
+        mock_mix_audio_tracks.assert_called_once()
+        mix_kwargs = mock_mix_audio_tracks.call_args.kwargs
+        assert mix_kwargs["track1_volume"] == mock_build_expr.return_value
+
+    @patch("src.services.audio_merger.AudioMerger.mix_audio_tracks")
+    @patch("src.services.ducking_service.DuckingService.build_volume_expr")
+    def test_regenerate_track_audio_skips_smoothing_when_ducking_disabled(
+        self,
+        mock_build_expr,
+        mock_mix_audio_tracks,
+        mock_ffmpeg_runner,
+        tmp_path,
+    ):
+        """Ducking disabled path should keep plain background volume."""
+        track = SubtitleTrack()
+        audio1 = tmp_path / "seg1.mp3"
+        audio1.write_text("dummy audio content 1", encoding="utf-8")
+        seg1 = SubtitleSegment(0, 1000, "Segment 1", audio_file=str(audio1), volume=1.0)
+        track.add_segment(seg1)
+
+        output_path = tmp_path / "output_plain.mp3"
+        bg_audio = tmp_path / "bg.mp3"
+        bg_audio.write_text("bg", encoding="utf-8")
+
+        AudioRegenerator.regenerate_track_audio(
+            track=track,
+            output_path=output_path,
+            video_audio_path=bg_audio,
+            bg_volume=0.6,
+            ducking_enabled=False,
+        )
+
+        mock_build_expr.assert_not_called()
+        mock_mix_audio_tracks.assert_called_once()
+        mix_kwargs = mock_mix_audio_tracks.call_args.kwargs
+        assert mix_kwargs["track1_volume"] == 0.6

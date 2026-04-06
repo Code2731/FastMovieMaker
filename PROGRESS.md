@@ -4,9 +4,84 @@
 
 ## 현재 상태 및 미구현 사항
 
-**현재 상태:** Day 50 완료 (2026-03-10)
+**현재 상태:** Day 52 완료 (2026-03-10)
 
 **참고:** 가상환경 Python 3.13 사용 (3.9 호환성 고려 불필요)
+
+---
+
+## 2026-03-10 (Day 52) 작업 요약
+
+**Cloud Sync 3단계 (원격 Git 수동 동기화 MVP)**
+
+### 1. Git 백엔드 원격 연동
+- `src/services/project_sync_service.py`
+  - `ProjectSyncBackend` lifecycle 훅 추가:
+    - `prepare_remote_sync()`
+    - `finalize_remote_sync_if_needed(file_key)`
+  - `GitSyncBackend` 원격 정책 구현:
+    - `origin + 현재 브랜치` 대상 고정
+    - sync 시작 전 clean working tree 강제(추적/미추적 변경 모두 차단)
+    - `git fetch origin <branch>` + `git pull --ff-only origin <branch>`
+    - `.fmm_sync_store/<project>` 변경 시에만 자동 `commit` + `push`
+  - `FileSystemSyncBackend`는 동일 인터페이스 no-op 유지
+
+### 2. 서비스 플로우 고정
+- `ProjectSyncService.sync(...)`
+  - backend 준비 단계에서 `prepare_remote_sync()` 호출
+  - push 경로(초기 push/로컬 변경 push/`USE_LOCAL`)에서만 finalize 실행
+  - pull/no-op/`USE_REMOTE` 경로에서는 finalize 미실행
+  - 실패는 `SyncResult(ERROR, message, detail)` 구조를 유지해 UI 문자열 파싱 제거
+
+### 3. 테스트/문서 동기화
+- 테스트 확장:
+  - `tests/test_project_sync_backends.py`
+    - dirty repo 차단
+    - upstream/origin 누락 차단
+    - `pull --ff-only` 실패 차단
+    - sync 파일 변경 유무에 따른 finalize(commit/push) 분기
+  - `tests/test_project_sync_service.py`
+    - prepare/finalize 호출 규칙(push 전용 finalize) 검증
+    - prepare 실패 표준 오류 검증
+- 번역 키 추가:
+  - `"Failed to prepare remote git sync."`
+  - `"Failed to push synced project to remote git."`
+- 문서 반영:
+  - `README.md`, `TODO.md`, `docs/DEVELOPER_GUIDE.md` 기준선 업데이트
+
+### 4. 실행 검증 결과
+- `pytest tests/test_project_sync_backends.py tests/test_project_sync_service.py -v` → 22 passed
+- `pytest tests/test_project_controller_sync.py tests/test_settings_manager.py -v` → 19 passed
+- `QT_QPA_PLATFORM=offscreen pytest tests/test_preferences_tts_provider.py -v` → 8 passed
+- `pytest tests/test_project_io.py tests/test_controllers.py -q` → 24 passed
+
+---
+
+## 2026-03-10 (Day 51) 작업 요약
+
+**오디오 더킹 고도화 1차 (Attack/Release 스무딩)**
+
+### 1. 덕킹 엔진 고도화
+- `DuckingService.build_volume_expr(...)` 확장:
+  - 신규 파라미터 `attack_ms`, `release_ms`, `merge_gap_ms`
+  - 오디오가 있는 세그먼트만 대상으로 덕킹 윈도우 생성
+  - 인접 세그먼트 gap 병합 + attack/hold/release envelope 표현식 생성
+  - `attack/release=0` 하위호환 유지
+
+### 2. 파이프라인/UX 연동
+- `AudioRegenerator.regenerate_track_audio(...)`에 덕킹 스무딩 파라미터 전달 경로 추가
+- `ExportDialog` BGM Ducking 섹션 확장:
+  - `Attack(ms)`, `Release(ms)` 입력 추가(기본 120/240)
+  - `Enable Auto-Ducking` 토글과 입력 활성/비활성 동기화
+  - regenerate 호출 시 `duck_attack_ms`, `duck_release_ms`, `duck_merge_gap_ms=150` 전달
+
+### 3. 테스트/문서 동기화
+- 테스트 확장:
+  - `tests/test_ducking_service.py` (스무딩/병합/하위호환)
+  - `tests/test_audio_regenerator_integration.py` (덕킹 파라미터 전달/비활성 경로)
+  - `tests/test_export_dialog_status.py` (덕킹 UI 상태/prepare 전달값)
+- 문서 갱신:
+  - `README.md`, `TODO.md`, `docs/DEVELOPER_GUIDE.md`에 스프린트 기준 반영
 
 ---
 
@@ -324,8 +399,8 @@
 | **코드 품질 개선 (Simplify)** — `SubtitleAnimation.is_active` 프로퍼티 추가(subtitle_panel/timeline_painter 중복 체크 제거), `timeline_painter.py` 배지 draw 시 `painter.save()/restore()` 추가(상태 누수 수정), `TemplateService._user_dir` 캐싱(`__init__`에서 1회 결정 → 4개 내부 `_get_user_dir()` 호출 교체), `TODO.md` 현행화(Day 21 잔여물 제거, Day 37 기준 갱신) | **완료 (Day 37)** |
 | **TECHSPEC.md 갱신 + Phase EXPORT2** — TECHSPEC.md 전체 재작성(v0.4.0→v0.10.0, Day 37 기준: 프로젝트 파일 v12, 731→744 테스트, VideoClip/VideoClipTrack/ProjectState 모델 완전 반영, 다이얼로그 9→24개, services 목록 확장, 워커 목록 확장); `ExportPreset` 모델에 `crf: int = 23` + `speed_preset: str = "medium"` 필드 + `to_dict()/from_dict()` 추가; `ExportPresetManager` 신규(QSettings Group `"ExportPresets"`, save/load/delete/list/exists/get_all 메서드); `ExportDialog` 확장(Video Options 상단에 프리셋 툴바[QComboBox+Save…+Delete], Audio Bitrate[96k/128k/192k/320k], Container[MP4/MKV/WebM] 행 추가, 컨테이너 변경 시 파일 저장 필터·확장자 자동 연동, `_on_export_preset_selected()` 전체 UI 세팅); ko.py i18n 8개 키 추가; `tests/test_export2.py` 신규 13개 테스트(744/744 passed) | **완료 (Day 38)** |
 | **Phase PERF/UX3 — 프로젝트 로드 속도 개선** — `project_io.py`: `gzip.compress()` 저장 + magic byte `\x1f\x8b` 자동 감지 해제(기존 평문 JSON 하위호환 완전 보장), `SubtitleAnimation` import 모듈 상단으로 이동(세그먼트마다 반복 로컬 import 제거); `project_controller.py`: `on_load_project()` 중복 비디오 로드 블록 제거(미디어 플레이어 초기화 2회→1회), 파일 대화상자 필터 `*.fmm *.fmm.json`으로 확장; `test_project_io.py`: gzip 인식 직접 파싱 테스트 3개 수정(`import gzip` 추가); 신규 테스트 없음(744/744 passed 유지) | **완료 (Day 39)** |
-| **문서 동기화 + 테스트 안정화** — `src/services/ffmpeg_logger.py`/`src/services/template_service.py` writable fallback 추가(권한 제한 환경 대응), `src/ui/dialogs/tts_dialog.py` ElevenLabs rate 변수 버그 수정, `tests/test_tts_dialog_gui.py` visibility 테스트 픽스(dialog.show), `pyproject.toml` pytest `slow` 마커 등록, `README.md`/`TODO.md`/`PROGRESS.md` 현행화; 전체 테스트 **910/911 passed** | **완료 (Day 40)** |
-| **테스트 수치 검증 + 문서 재동기화** — `QT_QPA_PLATFORM=offscreen pytest tests/ -q --collect-only` 실행으로 **911 tests collected** 확인, `QT_QPA_PLATFORM=offscreen pytest tests/ -q` 실행으로 **910/911 passed** 확인, `README.md` 현재 수치/배지 문구 동기화 | **완료 (Day 42)** |
+| **문서 동기화 + 테스트 안정화** — `src/services/ffmpeg_logger.py`/`src/services/template_service.py` writable fallback 추가(권한 제한 환경 대응), `src/ui/dialogs/tts_dialog.py` ElevenLabs rate 변수 버그 수정, `tests/test_tts_dialog_gui.py` visibility 테스트 픽스(dialog.show), `pyproject.toml` pytest `slow` 마커 등록, `README.md`/`TODO.md`/`PROGRESS.md` 현행화; 전체 테스트 **927/928 passed** | **완료 (Day 40)** |
+| **테스트 수치 검증 + 문서 재동기화** — `QT_QPA_PLATFORM=offscreen pytest tests/ -q --collect-only` 실행으로 **928 tests collected** 확인, `QT_QPA_PLATFORM=offscreen pytest tests/ -q` 실행으로 **927/928 passed** 확인, `README.md` 현재 수치/배지 문구 동기화 | **완료 (Day 42)** |
 | **문서-테스트 수치 동기화 자동화 + 개발자 가이드 착수** — `scripts/sync_test_counts.py` 추가(update/check 모드), `.github/workflows/test-count-sync.yml` 추가(PR/푸시 시 수치 불일치 실패), `docs/DEVELOPER_GUIDE.md` 신규 작성(셋업/아키텍처/테스트/PR 체크리스트) | **완료 (Day 42)** |
 | **품질 파이프라인 확장 + 실시간 자막 프리뷰 MVP** — `.github/workflows/tests.yml` 추가(PR/푸시 `pytest tests/ -q`), `scripts/sync_test_counts.py`를 Day 비의존 운영 모드로 안정화(테스트 수치 블록만 갱신), `docs/DEVELOPER_GUIDE.md` 확장(브랜치/커밋 규칙·테스트 전략·릴리즈 체크리스트), `WhisperDialog` 라이브 프리뷰(최근 8개 세그먼트) + `tests/test_whisper_dialog_preview.py` 추가, `scripts/pre_push_checks.sh`/`.githooks/pre-push`/`scripts/install_git_hooks.sh`로 pre-push 루틴 도입 | **완료 (Day 43)** |
 

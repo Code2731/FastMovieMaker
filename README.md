@@ -6,7 +6,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.13%2B-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.10-green.svg)](https://pypi.org/project/PySide6/)
-[![Tests](https://img.shields.io/badge/tests-910%20passed%20%2F%20911%20collected-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-944%20passed%20%2F%20945%20collected-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 <p align="center">
@@ -27,7 +27,7 @@
 - **필름스트립 썸네일** — 비디오 클립 내 연속된 썸네일 표시로 직관적인 편집
 - 커스텀 QPainter 타임라인 위젯으로 프레임 단위 정밀 편집
 - 끊김 없는 클립 간 자동 소스 전환
-- **910 passed / 911 collected**로 검증된 견고한 재생 시스템
+- **944 passed / 945 collected**로 검증된 견고한 재생 시스템
 - **GPU 가속 인코딩** — NVENC, QSV, AMF 내보내기 가속 지원
 - **스마트 화면 비율 조정** — 9:16 (Shorts/Reels) 템플릿 적용 시 자막 레이아웃 자동 최적화
 - **자석 스냅 (Magnetic Snap)** — 클립 이동 시 인접 클립 및 플레이헤드에 자동 정렬 (Toggle: `S`)
@@ -103,6 +103,7 @@
   - `.fmm.json` 프로젝트 파일 저장/불러오기
   - 수동 프로젝트 동기화(MVP): 로컬 폴더 백엔드 + File > Sync Now
   - Cloud Sync 2단계(완료): FileSystem/Git 백엔드 선택 + 저장 시 선택적 Auto Push
+  - Cloud Sync 3단계(완료): Git 원격 수동 동기화(fetch/pull --ff-only + sync store 자동 commit/push)
   - 백업 시스템을 포함한 자동 저장
   - QUndoStack을 이용한 실행 취소/다시 실행
 
@@ -259,7 +260,7 @@ python main.py
 
 ### 포괄적인 테스트 스위트
 ```bash
-# 전체 테스트 실행 (현재 기준 910 passed / 911 collected)
+# 전체 테스트 실행 (현재 기준 944 passed / 945 collected)
 QT_QPA_PLATFORM=offscreen pytest tests/ -q
 
 # 주요 테스트 모듈:
@@ -370,13 +371,16 @@ track.clips[1].source_path = "path/to/video_b.mp4"
 - [x] 프로젝트 파일 압축 안정화+계측 (Day 48 완료, gzip compact 직렬화 + 계측/회귀 테스트 고정)
 - [x] 클라우드 프로젝트 동기화 MVP (Day 49 완료, 로컬 폴더 백엔드 + 수동 Sync Now + 충돌 요약 모달)
 - [x] Cloud Sync 2단계 (Day 50 완료, 백엔드 추상화 + FileSystem/Git + 선택적 Auto Push on Save)
-- 🔄 다음 스프린트: **클라우드 동기화 후속** (원격 Git/자동 스케줄 동기화 정책)
+- [x] Cloud Sync 3단계 (Day 52 완료, origin/current branch 수동 원격 동기화 + dirty repo 차단 + ff-only pull)
+- [x] 오디오 더킹 고도화 1차 — Attack/Release 스무딩 (Day 51)
+- [x] Cloud Sync 3단계 hardening — Git timeout, 타입 힌트, zvec 상태 저장소 통합 (Day 52)
+- [x] 코드 품질 개선 (Simplify) — 중복 normalize 제거, `finalize_remote_sync` 파라미터 정리, `ZvecStateStore` 리소스 정리
 - [x] Whisper 변환 중 실시간 자막 미리보기 (v0.9.6)
 - [x] 타임라인 마커 시스템 — M 키, 컬러 레이블, Undo/Redo (Phase D3)
 - [x] 컬러 보정 타임라인 인디케이터 — 보정된 클립 뱃지 표시 (Phase D3)
 - [x] 커스텀 TTS 제공자를 위한 플러그인 시스템
-- [ ] 클라우드 프로젝트 동기화 (MVP/2단계 완료, 원격 Git/자동 스케줄 동기화는 후속)
-- [ ] 오디오 더킹 (Audio Ducking) 고도화
+- [ ] 클라우드 프로젝트 동기화 (MVP/2/3단계 완료, 자동 스케줄 동기화는 후속)
+- 🔄 다음: **테스트 수치 문서 동기화** 및 APV 시크릿 운영 마감
 
 ---
 
