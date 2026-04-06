@@ -47,6 +47,9 @@ class ProjectController:
             save_project(ctx.project, path)
             ctx.current_project_path = path
             ctx.autosave.set_active_file(path)
+            auto_sync = getattr(ctx, "auto_sync", None)
+            if auto_sync is not None:
+                auto_sync.set_project_path(path)
             self.update_recent_menu()
             ctx.status_bar().showMessage(f"{tr('Project saved')}: {path}")
             self._maybe_auto_push_on_save(path)
@@ -69,6 +72,9 @@ class ProjectController:
             ctx.current_project_path = path
             ctx.autosave.set_project(project)
             ctx.autosave.set_active_file(path)
+            auto_sync = getattr(ctx, "auto_sync", None)
+            if auto_sync is not None:
+                auto_sync.set_project_path(path)
             ctx.undo_stack.clear()
             ctx.timeline.set_project(project)
 

@@ -277,6 +277,18 @@ class PreferencesDialog(QDialog):
 
         self._sync_auto_push_on_save = QCheckBox(tr("Auto Push On Save"))
         sync_layout.addRow("", self._sync_auto_push_on_save)
+
+        self._sync_auto_enabled = QCheckBox(tr("Enable Auto Sync"))
+        sync_layout.addRow("", self._sync_auto_enabled)
+
+        self._sync_auto_interval = QSpinBox()
+        self._sync_auto_interval.setRange(1, 60)
+        self._sync_auto_interval.setSuffix(tr(" min"))
+        self._sync_auto_interval.setToolTip(tr("How often to sync automatically (1–60 minutes)"))
+        sync_layout.addRow(tr("Auto Sync Interval:"), self._sync_auto_interval)
+
+        self._sync_auto_enabled.toggled.connect(self._sync_auto_interval.setEnabled)
+
         self._project_sync_backend.currentIndexChanged.connect(self._on_sync_backend_changed)
         layout.addWidget(sync_group)
 
@@ -482,6 +494,11 @@ class PreferencesDialog(QDialog):
         project_sync_git_repo = self._settings.get_project_sync_git_repo_path()
         self._project_sync_git_repo.setText(project_sync_git_repo or "")
         self._sync_auto_push_on_save.setChecked(self._settings.get_project_sync_auto_push_on_save())
+        auto_enabled = bool(self._settings.get_project_sync_auto_enabled())
+        self._sync_auto_enabled.setChecked(auto_enabled)
+        auto_interval = self._settings.get_project_sync_auto_interval_minutes()
+        self._sync_auto_interval.setValue(int(auto_interval) if auto_interval is not None else 5)
+        self._sync_auto_interval.setEnabled(auto_enabled)
         self._on_sync_backend_changed()
 
         # API Keys
@@ -532,6 +549,8 @@ class PreferencesDialog(QDialog):
         project_sync_git_repo = self._project_sync_git_repo.text().strip()
         self._settings.set_project_sync_git_repo_path(project_sync_git_repo if project_sync_git_repo else None)
         self._settings.set_project_sync_auto_push_on_save(self._sync_auto_push_on_save.isChecked())
+        self._settings.set_project_sync_auto_enabled(self._sync_auto_enabled.isChecked())
+        self._settings.set_project_sync_auto_interval_minutes(self._sync_auto_interval.value())
 
         # API Keys
         self._settings.set_tts_default_provider(self._tts_provider.currentData())

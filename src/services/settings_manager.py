@@ -274,6 +274,22 @@ class SettingsManager:
         """Set whether to auto-push sync after manual project save."""
         self._settings.setValue("project_sync/auto_push_on_save", bool(enabled))
 
+    def get_project_sync_auto_enabled(self) -> bool:
+        """Get whether periodic auto sync is enabled (default: False)."""
+        return bool(self._settings.value("project_sync/auto_enabled", False, bool))
+
+    def set_project_sync_auto_enabled(self, enabled: bool) -> None:
+        """Set whether periodic auto sync is enabled."""
+        self._settings.setValue("project_sync/auto_enabled", bool(enabled))
+
+    def get_project_sync_auto_interval_minutes(self) -> int:
+        """Get the auto sync interval in minutes (default: 5)."""
+        return self._settings.value("project_sync/auto_interval_minutes", 5, int)
+
+    def set_project_sync_auto_interval_minutes(self, minutes: int) -> None:
+        """Set the auto sync interval in minutes."""
+        self._settings.setValue("project_sync/auto_interval_minutes", minutes)
+
     def get_project_sync_state(self) -> dict[str, dict[str, str]]:
         """Get per-project sync state map."""
         store = self._get_state_store()

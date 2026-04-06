@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
     from src.models.project import ProjectState
     from src.services.autosave import AutoSaveManager
+    from src.services.auto_sync_manager import AutoSyncManager
     from src.services.frame_cache_service import FrameCacheService
     from src.ui.media_library_panel import MediaLibraryPanel
     from src.ui.playback_controls import PlaybackControls
@@ -59,6 +60,7 @@ class AppContext:
 
         # ---- Services ----
         self.autosave: AutoSaveManager = None  # type: ignore[assignment]
+        self.auto_sync: AutoSyncManager = None  # type: ignore[assignment]
         self.frame_cache_service: FrameCacheService | None = None
 
         # ---- Timers (생성은 MainWindow) ----
