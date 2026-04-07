@@ -288,6 +288,7 @@ class MainWindow(QMainWindow):
         self._subtitle_panel.tts_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_tts)
         self._subtitle_panel.animation_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_animation)
         self._subtitle_panel.bulk_animation_requested.connect(self._subtitle_ctrl.on_bulk_edit_animation)
+        self._subtitle_panel.bulk_style_requested.connect(self._subtitle_ctrl.on_bulk_edit_style)
         self._subtitle_panel.font_changed.connect(self._subtitle_ctrl.on_font_changed)
 
         # Timeline subtitle

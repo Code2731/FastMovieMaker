@@ -25,6 +25,8 @@ class ITranscriber(Protocol):
         on_progress: Callable[[int, int], None] | None = None,
         on_segment: Callable[[SubtitleSegment], None] | None = None,
         check_cancelled: Callable[[], bool] | None = None,
+        on_language_detected: Callable[[str, float], None] | None = None,
+        on_segment_confidence: Callable[[SubtitleSegment, int], None] | None = None,
     ) -> SubtitleTrack:
         """오디오 파일을 자막 트랙으로 변환. 취소 시 부분 결과 반환."""
         ...
@@ -42,6 +44,8 @@ class WhisperTranscriber:
         on_progress: Callable[[int, int], None] | None = None,
         on_segment: Callable[[SubtitleSegment], None] | None = None,
         check_cancelled: Callable[[], bool] | None = None,
+        on_language_detected: Callable[[str, float], None] | None = None,
+        on_segment_confidence: Callable[[SubtitleSegment, int], None] | None = None,
     ) -> SubtitleTrack:
         """faster-whisper로 음성→텍스트 변환."""
         from src.services.whisper_service import (
@@ -65,6 +69,8 @@ class WhisperTranscriber:
                 on_progress=on_progress,
                 on_segment=on_segment,
                 check_cancelled=check_cancelled,
+                on_language_detected=on_language_detected,
+                on_segment_confidence=on_segment_confidence,
             )
         finally:
             if model is not None:

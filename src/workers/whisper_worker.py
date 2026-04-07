@@ -23,7 +23,9 @@ class WhisperWorker(QObject):
 
     status_update = Signal(str)
     progress = Signal(int, int)
-    segment_ready = Signal(object)  # Signal(SubtitleSegment) but avoiding circular import issues in signal def
+    segment_ready = Signal(object)     # SubtitleSegment
+    segment_confidence = Signal(object, int)  # (SubtitleSegment, confidence_pct 0-100)
+    language_detected = Signal(str, float)    # (language_code, probability)
     finished = Signal(SubtitleTrack)
     error = Signal(str)
 
@@ -65,6 +67,8 @@ class WhisperWorker(QObject):
                 on_progress=lambda cur, total: self.progress.emit(cur, total),
                 on_segment=lambda seg: self.segment_ready.emit(seg),
                 check_cancelled=lambda: self._cancelled,
+                on_language_detected=lambda lang, prob: self.language_detected.emit(lang, prob),
+                on_segment_confidence=lambda seg, conf: self.segment_confidence.emit(seg, conf),
             )
 
             if not self._cancelled:

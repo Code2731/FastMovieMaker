@@ -8,6 +8,7 @@ from typing import Any
 from PySide6.QtCore import QObject, Signal
 
 from src.models.subtitle import SubtitleTrack
+from src.models.timeline_marker import TimelineMarker
 from src.services.video_exporter import export_video
 
 
@@ -67,6 +68,7 @@ class ExportWorker(QObject):
         video_volume: float = 1.0,
         audio_volume: float = 1.0,
         audio_bitrate: str = "192k",
+        markers: list[TimelineMarker] | None = None,
     ):
         super().__init__()
         self._video_path = video_path
@@ -87,6 +89,7 @@ class ExportWorker(QObject):
         self._video_volume = video_volume
         self._audio_volume = audio_volume
         self._audio_bitrate = audio_bitrate
+        self._markers = markers
 
     def run(self) -> None:
         try:
@@ -119,6 +122,7 @@ class ExportWorker(QObject):
                 video_volume=self._video_volume,
                 audio_volume=self._audio_volume,
                 audio_bitrate=self._audio_bitrate,
+                markers=self._markers,
             )
             self.finished.emit(str(self._output_path))
         except Exception as e:

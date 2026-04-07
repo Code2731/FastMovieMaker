@@ -185,11 +185,13 @@ class ProjectController:
         text_overlays = (
             list(ctx.project.text_overlay_track.overlays) if len(ctx.project.text_overlay_track) > 0 else None
         )
+        markers = list(ctx.project.markers) if ctx.project.markers else None
         dialog = ExportDialog(
             ctx.project.video_path, ctx.project.subtitle_track, parent=ctx.window,
             video_has_audio=ctx.project.video_has_audio, overlay_path=overlay_path,
             overlay_template=overlay_template,
             image_overlays=img_overlays, video_tracks=video_tracks, text_overlays=text_overlays,
+            markers=markers,
         )
         dialog.exec()
 

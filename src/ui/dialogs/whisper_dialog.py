@@ -86,6 +86,12 @@ class WhisperDialog(QDialog):
         self._status_label = QLabel(tr("Ready"))
         layout.addWidget(self._status_label)
 
+        # Detected language (shown after auto-detect)
+        self._detected_lang_label = QLabel("")
+        self._detected_lang_label.setStyleSheet("color: #66bb6a; font-size: 11px;")
+        self._detected_lang_label.setVisible(False)
+        layout.addWidget(self._detected_lang_label)
+
         # Live subtitle preview
         self._preview_label = QLabel(tr("Live Preview"))
         layout.addWidget(self._preview_label)
@@ -163,6 +169,8 @@ class WhisperDialog(QDialog):
         self._worker.status_update.connect(self._on_status)
         self._worker.progress.connect(self._on_progress)
         self._worker.segment_ready.connect(self._on_segment_ready)
+        self._worker.language_detected.connect(self._on_language_detected)
+        self._worker.segment_confidence.connect(self._on_segment_confidence)
         self._worker.finished.connect(self._on_finished)
         self._worker.error.connect(self._on_error)
         self._worker.finished.connect(self._cleanup_thread)
@@ -220,6 +228,8 @@ class WhisperDialog(QDialog):
                 self._worker.status_update,
                 self._worker.progress,
                 self._worker.segment_ready,
+                self._worker.language_detected,
+                self._worker.segment_confidence,
                 self._worker.finished,
                 self._worker.error,
             ]:
@@ -241,6 +251,27 @@ class WhisperDialog(QDialog):
 
     def _on_status(self, message: str) -> None:
         self._status_label.setText(message)
+
+    def _on_language_detected(self, language: str, probability: float) -> None:
+        """Update UI with auto-detected language."""
+        pct = int(probability * 100)
+        self._detected_lang_label.setText(
+            tr("Detected language: {lang} ({pct}% confidence)").format(lang=language.upper(), pct=pct)
+        )
+        self._detected_lang_label.setVisible(True)
+
+    def _on_segment_confidence(self, segment, confidence_pct: int) -> None:
+        """Append confidence indicator to last preview line."""
+        if not self._preview_lines:
+            return
+        # Replace last line (added by _on_segment_ready) with confidence badge
+        bar = "▓" * (confidence_pct // 20) + "░" * (5 - confidence_pct // 20)
+        confidence_tag = f" [{bar} {confidence_pct}%]"
+        self._preview_lines[-1] = self._preview_lines[-1].rstrip() + confidence_tag
+        self._preview_text.setPlainText("\n".join(self._preview_lines))
+        self._preview_text.verticalScrollBar().setValue(
+            self._preview_text.verticalScrollBar().maximum()
+        )
 
     def _on_segment_ready(self, segment) -> None:
         """실시간 미리보기: 메인 창으로 전달하고 세그먼트 수 갱신."""

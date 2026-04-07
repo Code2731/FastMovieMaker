@@ -31,6 +31,7 @@ from src.models.export_preset import DEFAULT_PRESETS, ExportPreset
 from src.models.image_overlay import ImageOverlay
 from src.models.subtitle import SubtitleTrack
 from src.models.text_overlay import TextOverlay
+from src.models.timeline_marker import TimelineMarker
 from src.models.video_clip import VideoClipTrack
 from src.services.export_preset_manager import ExportPresetManager
 from src.utils.i18n import tr
@@ -85,6 +86,7 @@ class ExportDialog(QDialog):
         image_overlays: list[ImageOverlay] | None = None,
         video_tracks: list[VideoClipTrack] | None = None,
         text_overlays: list[TextOverlay] | None = None,
+        markers: list[TimelineMarker] | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle(tr("Export Video"))
@@ -99,6 +101,7 @@ class ExportDialog(QDialog):
         self._image_overlays = image_overlays
         self._video_tracks = video_tracks
         self._text_overlays = text_overlays
+        self._markers = markers
         self._thread: QThread | None = None
         self._worker: ExportWorker | None = None
         self._temp_audio_path: Path | None = None
@@ -364,6 +367,19 @@ class ExportDialog(QDialog):
                 self._gpu_checkbox.setToolTip(tr("No hardware encoder detected."))
 
         video_layout.addWidget(self._gpu_checkbox)
+
+        has_markers = bool(self._markers)
+        self._chapter_markers_checkbox = QCheckBox(tr("Embed Chapter Markers"))
+        self._chapter_markers_checkbox.setChecked(has_markers)
+        self._chapter_markers_checkbox.setEnabled(has_markers)
+        if not has_markers:
+            self._chapter_markers_checkbox.setToolTip(tr("No timeline markers — add markers to enable chapters."))
+        else:
+            self._chapter_markers_checkbox.setToolTip(
+                tr("{n} marker(s) will be embedded as chapters.").format(n=len(self._markers))
+            )
+        video_layout.addWidget(self._chapter_markers_checkbox)
+
         self._encoder_label = QLabel(f"{tr('Planned encoder:')} —")
         self._encoder_label.setStyleSheet("color: gray; font-size: 11px;")
         video_layout.addWidget(self._encoder_label)
@@ -628,6 +644,7 @@ class ExportDialog(QDialog):
             video_volume=self._bg_slider.value() / 100.0,
             audio_volume=self._tts_slider.value() / 100.0,
             audio_bitrate=self._audio_bitrate_combo.currentText(),
+            markers=self._markers if self._chapter_markers_checkbox.isChecked() else None,
         )
         self._worker.moveToThread(self._thread)
 

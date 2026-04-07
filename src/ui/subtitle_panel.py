@@ -219,6 +219,7 @@ class SubtitlePanel(QWidget):
     tts_edit_requested = Signal(int)  # segment index
     animation_edit_requested = Signal(int)  # segment index
     bulk_animation_requested = Signal(list)  # list[int] — 다중 세그먼트 인덱스
+    bulk_style_requested = Signal(list)      # list[int] — 다중 세그먼트 인덱스
     font_changed = Signal(str)
 
     def __init__(self, parent=None):
@@ -444,6 +445,7 @@ class SubtitlePanel(QWidget):
         tts_action = None
         anim_action = None
         bulk_anim_action = None
+        bulk_style_action = None
         if self._track and 0 <= row < len(self._track):
             delete_action = menu.addAction(tr("Delete Subtitle"))
             menu.addSeparator()
@@ -453,6 +455,9 @@ class SubtitlePanel(QWidget):
             if len(selected_rows) > 1:
                 bulk_anim_action = menu.addAction(
                     tr("Apply Animation to Selected...") + f" ({len(selected_rows)})"
+                )
+                bulk_style_action = menu.addAction(
+                    tr("Apply Style to Selected...") + f" ({len(selected_rows)})"
                 )
 
         menu.addSeparator()
@@ -468,6 +473,8 @@ class SubtitlePanel(QWidget):
             self.animation_edit_requested.emit(row)
         elif bulk_anim_action is not None and action == bulk_anim_action:
             self.bulk_animation_requested.emit(selected_rows)
+        elif bulk_style_action is not None and action == bulk_style_action:
+            self.bulk_style_requested.emit(selected_rows)
         elif action == add_action:
             if self._track and 0 <= row < len(self._track):
                 seg = self._track[row]
