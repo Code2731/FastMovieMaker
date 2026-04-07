@@ -25,6 +25,7 @@ class SubtitleSegment:
     voice: str | None = None  # Per-segment voice override
     speed: float | None = None  # Per-segment speed override
     animation: SubtitleAnimation | None = None  # Per-segment animation
+    speaker: str | None = None  # Speaker ID (e.g., "SPEAKER_01")
 
     @property
     def duration_ms(self) -> int:

@@ -387,6 +387,24 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(elevenlabs_group)
 
+        # HuggingFace group (for Diarization)
+        hf_group = QGroupBox(tr("HuggingFace (AI Speaker Diarization)"))
+        hf_layout = QVBoxLayout(hf_group)
+
+        hf_info = QLabel(
+            f"{tr('Get your Access Token at')}: https://huggingface.co/settings/tokens"
+        )
+        hf_info.setOpenExternalLinks(True)
+        hf_info.setStyleSheet("color: gray; font-style: italic;")
+        hf_layout.addWidget(hf_info)
+
+        self._huggingface_key = QLineEdit()
+        self._huggingface_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self._huggingface_key.setPlaceholderText(tr("Required for AI Speaker Diarization"))
+        hf_layout.addWidget(self._huggingface_key)
+
+        layout.addWidget(hf_group)
+
         # Info label
         info_label = QLabel(
             tr("Note: API keys are stored securely in your system settings.") + "\n"
@@ -404,6 +422,21 @@ class PreferencesDialog(QDialog):
         """단축키 커스터마이징 탭을 생성한다."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
+
+        # Preset selection
+        preset_row = QHBoxLayout()
+        preset_row.addWidget(QLabel(tr("Shortcut Preset:")))
+        self._shortcut_preset_combo = QComboBox()
+        from src.services.settings_manager import SHORTCUT_PRESETS
+        for name in SHORTCUT_PRESETS.keys():
+            self._shortcut_preset_combo.addItem(name)
+        preset_row.addWidget(self._shortcut_preset_combo)
+
+        apply_preset_btn = QPushButton(tr("Apply Preset"))
+        apply_preset_btn.clicked.connect(self._on_apply_shortcut_preset)
+        preset_row.addWidget(apply_preset_btn)
+        preset_row.addStretch()
+        layout.addLayout(preset_row)
 
         self._shortcuts_table = QTableWidget(len(_SHORTCUT_ACTIONS), 2)
         self._shortcuts_table.setHorizontalHeaderLabels(
@@ -444,10 +477,24 @@ class PreferencesDialog(QDialog):
             self._settings.set_shortcut(action, seq.toString())
 
     def _reset_all_shortcuts(self) -> None:
-        """모든 단축키를 기본값으로 초기화한다."""
+        """모든 단축키를 기본값으로 되돌린다."""
         for row, (action, _) in enumerate(_SHORTCUT_ACTIONS):
             default = _SHORTCUT_DEFAULTS.get(action, "")
             self._key_edits[row].setKeySequence(QKeySequence(default))
+
+    def _on_apply_shortcut_preset(self) -> None:
+        """선택된 프리셋을 UI에 반영한다 (저장은 OK 클릭 시)."""
+        preset_name = self._shortcut_preset_combo.currentText()
+        from src.services.settings_manager import SHORTCUT_PRESETS
+        if preset_name not in SHORTCUT_PRESETS:
+            return
+
+        preset_map = SHORTCUT_PRESETS[preset_name]
+        for row, (action, _) in enumerate(_SHORTCUT_ACTIONS):
+            if action in preset_map:
+                key = preset_map[action]
+                self._key_edits[row].setKeySequence(QKeySequence(key))
+
 
     def _load_settings(self):
         """Load current settings into UI."""
@@ -513,6 +560,7 @@ class PreferencesDialog(QDialog):
         self._deepl_key.setText(self._settings.get_deepl_api_key())
         self._openai_key.setText(self._settings.get_openai_api_key())
         self._elevenlabs_key.setText(self._settings.get_elevenlabs_api_key())
+        self._huggingface_key.setText(self._settings.get_huggingface_api_key())
 
         # TTS plugins
         self._tts_plugin_paths.clear()
@@ -557,6 +605,7 @@ class PreferencesDialog(QDialog):
         self._settings.set_deepl_api_key(self._deepl_key.text().strip())
         self._settings.set_openai_api_key(self._openai_key.text().strip())
         self._settings.set_elevenlabs_api_key(self._elevenlabs_key.text().strip())
+        self._settings.set_huggingface_api_key(self._huggingface_key.text().strip())
         self._settings.set_tts_plugin_paths(self._collect_tts_plugin_paths())
         reload_provider_registry()
         self._populate_tts_provider_options()

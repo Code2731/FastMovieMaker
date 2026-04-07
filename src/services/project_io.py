@@ -77,6 +77,8 @@ def _segment_to_dict(seg: SubtitleSegment) -> dict:
             "out_duration_ms": a.out_duration_ms,
             "slide_offset_px": a.slide_offset_px,
         }
+    if seg.speaker:
+        d["speaker"] = seg.speaker
     return d
 
 
@@ -95,6 +97,7 @@ def _dict_to_segment(d: dict) -> SubtitleSegment:
             voice=d.get("voice"),
             speed=d.get("speed"),
             animation=animation,
+            speaker=d.get("speaker"),
         )
     except KeyError as exc:
         raise ValueError(f"Subtitle segment data is missing required field: {exc}") from exc

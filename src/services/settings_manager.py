@@ -28,6 +28,21 @@ _SHORTCUT_DEFAULTS: dict[str, str] = {
     "paste_clip":        "Ctrl+V",
 }
 
+SHORTCUT_PRESETS: dict[str, dict[str, str]] = {
+    "Default": _SHORTCUT_DEFAULTS,
+    "Premiere Pro": {
+        **_SHORTCUT_DEFAULTS,
+        "split_clip": "Ctrl+K",
+        "play_pause": "Space",
+        "delete": "Shift+Delete",
+    },
+    "Final Cut Pro": {
+        **_SHORTCUT_DEFAULTS,
+        "split_clip": "Ctrl+B",
+        "play_pause": "Space",
+    },
+}
+
 
 class SettingsManager:
     """Wrapper around QSettings for type-safe preference management."""
@@ -165,6 +180,14 @@ class SettingsManager:
     def set_elevenlabs_api_key(self, key: str) -> None:
         """Set the ElevenLabs API key."""
         self._settings.setValue("api_keys/elevenlabs", key)
+
+    def get_huggingface_api_key(self) -> str:
+        """Get the HuggingFace API key (required for speaker diarization)."""
+        return self._settings.value("api_keys/huggingface", "", str)
+
+    def set_huggingface_api_key(self, key: str) -> None:
+        """Set the HuggingFace API key."""
+        self._settings.setValue("api_keys/huggingface", key)
 
     # ---------------------------------------------------- UI Settings
 
@@ -357,6 +380,16 @@ class SettingsManager:
     def set_shortcut(self, action: str, key: str) -> None:
         """Persist the key sequence string for the given action."""
         self._settings.setValue(f"shortcuts/{action}", key)
+
+    def apply_shortcut_preset(self, preset_name: str) -> bool:
+        """Apply a predefined shortcut map."""
+        if preset_name not in SHORTCUT_PRESETS:
+            return False
+        
+        preset_map = SHORTCUT_PRESETS[preset_name]
+        for action, key in preset_map.items():
+            self.set_shortcut(action, key)
+        return True
 
     @staticmethod
     def _normalize_path_list(value: Any) -> list[str]:

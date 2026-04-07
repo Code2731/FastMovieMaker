@@ -82,6 +82,14 @@ class WhisperDialog(QDialog):
         lang_layout.addWidget(self._lang_combo, 1)
         layout.addLayout(lang_layout)
 
+        # Speaker Diarization option
+        self._diarize_checkbox = QCheckBox(tr("Enable AI Speaker Diarization"))
+        from src.services.settings_manager import SettingsManager
+        hf_token = SettingsManager().get_huggingface_api_key()
+        self._diarize_checkbox.setChecked(bool(hf_token))
+        self._diarize_checkbox.setToolTip(tr("Assign speaker IDs to segments. Requires HuggingFace token in Preferences."))
+        layout.addWidget(self._diarize_checkbox)
+
         # Status
         self._status_label = QLabel(tr("Ready"))
         layout.addWidget(self._status_label)
@@ -155,6 +163,9 @@ class WhisperDialog(QDialog):
             self._on_error(f"Module load failed: {e}")
             return
 
+        from src.services.settings_manager import SettingsManager
+        hf_token = SettingsManager().get_huggingface_api_key() if self._diarize_checkbox.isChecked() else None
+
         # Worker + Thread setup
         self._thread = QThread()
         self._worker = WhisperWorker(
@@ -162,6 +173,7 @@ class WhisperDialog(QDialog):
             audio_path=self._audio_path,
             model_name=model_name,
             language=language,
+            hf_token=hf_token,
         )
         self._worker.moveToThread(self._thread)
 

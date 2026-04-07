@@ -281,7 +281,9 @@ class MainWindow(QMainWindow):
         # Subtitle editing → SubtitleController
         self._subtitle_panel.text_edited.connect(self._subtitle_ctrl.on_text_edited)
         self._subtitle_panel.time_edited.connect(self._subtitle_ctrl.on_time_edited)
-        self._subtitle_panel.segment_add_requested.connect(self._subtitle_ctrl.on_segment_add)
+        self._subtitle_panel.volume_edited.connect(self._subtitle_ctrl.on_segment_volume_edited)
+        self._subtitle_panel.speaker_edited.connect(self._subtitle_ctrl.on_speaker_edited)
+
         self._subtitle_panel.segment_delete_requested.connect(self._subtitle_ctrl.on_segment_delete)
         self._subtitle_panel.style_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_style)
         self._subtitle_panel.volume_edited.connect(self._subtitle_ctrl.on_segment_volume_edited)

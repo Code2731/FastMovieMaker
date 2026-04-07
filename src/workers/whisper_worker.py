@@ -29,12 +29,20 @@ class WhisperWorker(QObject):
     finished = Signal(SubtitleTrack)
     error = Signal(str)
 
-    def __init__(self, video_path: Path | None = None, audio_path: Path | None = None, model_name: str = "base", language: str = "ko"):
+    def __init__(
+        self,
+        video_path: Path | None = None,
+        audio_path: Path | None = None,
+        model_name: str = "base",
+        language: str = "ko",
+        hf_token: str | None = None,
+    ):
         super().__init__()
         self._video_path = video_path
         self._audio_path = audio_path
         self._model_name = model_name
         self._language = language
+        self._hf_token = hf_token
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -69,6 +77,7 @@ class WhisperWorker(QObject):
                 check_cancelled=lambda: self._cancelled,
                 on_language_detected=lambda lang, prob: self.language_detected.emit(lang, prob),
                 on_segment_confidence=lambda seg, conf: self.segment_confidence.emit(seg, conf),
+                hf_token=self._hf_token,
             )
 
             if not self._cancelled:

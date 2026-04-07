@@ -40,11 +40,12 @@ from src.utils.time_utils import ms_to_display, parse_flexible_timecode
 class _SubtitleTableModel(QAbstractTableModel):
     """Virtual model backed by SubtitleTrack — only provides data for visible rows."""
 
-    HEADERS = [tr("#"), tr("Start"), tr("End"), tr("Text"), tr("Vol")]
+    HEADERS = [tr("#"), tr("Start"), tr("End"), tr("Speaker"), tr("Text"), tr("Vol")]
 
     # Signals forwarded to panel
     text_committed = Signal(int, str)      # (row, new_text)
     volume_committed = Signal(int, float)  # (row, new_volume)
+    speaker_committed = Signal(int, str)   # (row, new_speaker)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -77,7 +78,7 @@ class _SubtitleTableModel(QAbstractTableModel):
         return len(self._track) if self._track else 0
 
     def columnCount(self, parent: QModelIndex | QPersistentModelIndex = QModelIndex()) -> int:
-        return 5
+        return 6
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
@@ -101,12 +102,14 @@ class _SubtitleTableModel(QAbstractTableModel):
             elif col == 2:
                 return ms_to_display(seg.end_ms)
             elif col == 3:
-                return seg.text
+                return seg.speaker or ""
             elif col == 4:
+                return seg.text
+            elif col == 5:
                 return f"{int(seg.volume * 100)}%"
 
         elif role == Qt.ItemDataRole.TextAlignmentRole:
-            if col in (0, 4):
+            if col in (0, 3, 5):
                 return int(Qt.AlignmentFlag.AlignCenter)
 
         elif role == Qt.ItemDataRole.BackgroundRole:
@@ -130,7 +133,7 @@ class _SubtitleTableModel(QAbstractTableModel):
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
         base = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
-        if index.column() in (3, 4):
+        if index.column() in (3, 4, 5):
             base |= Qt.ItemFlag.ItemIsEditable
         return base
 
@@ -142,12 +145,18 @@ class _SubtitleTableModel(QAbstractTableModel):
             return False
 
         if col == 3:
+            new_speaker = str(value).strip()
+            if new_speaker != (self._track[row].speaker or ""):
+                self.speaker_committed.emit(row, new_speaker)
+                self.dataChanged.emit(index, index)
+                return True
+        elif col == 4:
             new_text = str(value).strip()
             if new_text and new_text != self._track[row].text:
                 self.text_committed.emit(row, new_text)
                 self.dataChanged.emit(index, index)
                 return True
-        elif col == 4:
+        elif col == 5:
             raw = str(value).strip().rstrip("%")
             try:
                 pct = int(raw)
@@ -213,6 +222,7 @@ class SubtitlePanel(QWidget):
     text_edited = Signal(int, str)  # (segment index, new text)
     time_edited = Signal(int, int, int)  # (segment index, start_ms, end_ms)
     volume_edited = Signal(int, float)  # (segment index, new volume 0.0~2.0)
+    speaker_edited = Signal(int, str)  # (segment index, new speaker)
     segment_add_requested = Signal(int, int)  # (start_ms, end_ms)
     segment_delete_requested = Signal(int)  # segment index
     style_edit_requested = Signal(int)  # segment index
@@ -255,6 +265,7 @@ class SubtitlePanel(QWidget):
         self._model = _SubtitleTableModel(self)
         self._model.text_committed.connect(self.text_edited)
         self._model.volume_committed.connect(self.volume_edited)
+        self._model.speaker_committed.connect(self.speaker_edited)
 
         self._table = QTableView()
         self._table.setModel(self._model)
@@ -268,8 +279,9 @@ class SubtitlePanel(QWidget):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
 
         self._table.clicked.connect(self._on_clicked)
         self._table.doubleClicked.connect(self._on_double_clicked)
@@ -331,7 +343,7 @@ class SubtitlePanel(QWidget):
         if not self._track or row < 0 or row >= len(self._track):
             return
 
-        if col in (3, 4):
+        if col in (3, 4, 5):
             self._table.edit(index)
         elif col in (1, 2):
             seg = self._track[row]

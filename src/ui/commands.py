@@ -1527,3 +1527,22 @@ class ApplyTTSVerificationCommand(QUndoCommand):
         for c in self._corrections:
             if 0 <= c.seg_index < len(self._track.segments):
                 self._track.update_segment_time(c.seg_index, c.old_start_ms, c.old_end_ms)
+
+
+class EditSpeakerCommand(QUndoCommand):
+    """Change the speaker ID of a subtitle segment."""
+
+    def __init__(self, track: SubtitleTrack, index: int, old_speaker: str | None, new_speaker: str | None):
+        super().__init__(f"Edit speaker (segment {index + 1})")
+        self._track = track
+        self._index = index
+        self._old_speaker = old_speaker
+        self._new_speaker = new_speaker
+
+    def redo(self) -> None:
+        if 0 <= self._index < len(self._track):
+            self._track[self._index].speaker = self._new_speaker
+
+    def undo(self) -> None:
+        if 0 <= self._index < len(self._track):
+            self._track[self._index].speaker = self._old_speaker

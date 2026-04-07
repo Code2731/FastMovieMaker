@@ -212,9 +212,10 @@ class ProjectController:
         )
         from src.ui.dialogs.batch_export_dialog import BatchExportDialog
         dialog = BatchExportDialog(
-            ctx.project.video_path, ctx.project.subtitle_track, parent=ctx.window,
+            ctx.project.video_path, ctx.project.subtitle_tracks, parent=ctx.window,
             video_has_audio=ctx.project.video_has_audio, overlay_path=overlay_path,
             image_overlays=img_overlays, text_overlays=text_overlays,
+            active_track_index=ctx.project.active_track_index,
         )
         dialog.exec()
 
