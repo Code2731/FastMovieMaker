@@ -65,7 +65,7 @@ def test_sync_push_and_no_changes(tmp_path: Path) -> None:
     assert second.remote_info is not None
 
 
-def test_sync_pull_when_remote_changed_and_local_unchanged(tmp_path: Path) -> None:
+def test_sync_auto_conflicts_when_remote_changed_and_local_unchanged(tmp_path: Path) -> None:
     local = tmp_path / "sample.fmm.json"
     local.write_text('{"base":1}', encoding="utf-8")
     sync_root = tmp_path / "sync"
@@ -77,6 +77,25 @@ def test_sync_pull_when_remote_changed_and_local_unchanged(tmp_path: Path) -> No
     (sync_root / "sample.fmm.json").write_text('{"remote":2}', encoding="utf-8")
 
     result = svc.sync(local, sync_root)
+    assert result.code == SyncResultCode.CONFLICT
+    assert result.conflict_reason == "remote_changed_requires_reload"
+    assert result.local_info is not None
+    assert result.remote_info is not None
+    assert local.read_text(encoding="utf-8") == '{"base":1}'
+
+
+def test_sync_use_remote_applies_remote_when_local_unchanged(tmp_path: Path) -> None:
+    local = tmp_path / "sample.fmm.json"
+    local.write_text('{"base":1}', encoding="utf-8")
+    sync_root = tmp_path / "sync"
+    sync_root.mkdir()
+    settings = _FakeSettings()
+    svc = ProjectSyncService(settings=settings)  # type: ignore[arg-type]
+
+    assert svc.sync(local, sync_root).code == SyncResultCode.SUCCESS
+    (sync_root / "sample.fmm.json").write_text('{"remote":2}', encoding="utf-8")
+
+    result = svc.sync(local, sync_root, policy=SyncPolicy.USE_REMOTE)
     assert result.code == SyncResultCode.SUCCESS
     assert result.local_info is not None
     assert result.remote_info is not None
@@ -287,7 +306,7 @@ def test_sync_use_remote_skips_finalize(tmp_path: Path) -> None:
     svc = ProjectSyncService(settings=settings)  # type: ignore[arg-type]
     backend = _StubBackend(remote_payload=b'{"remote":2}')
 
-    result = svc.sync(local, backend=backend)
+    result = svc.sync(local, backend=backend, policy=SyncPolicy.USE_REMOTE)
 
     assert result.code == SyncResultCode.SUCCESS
     assert backend.prepare_calls == 1

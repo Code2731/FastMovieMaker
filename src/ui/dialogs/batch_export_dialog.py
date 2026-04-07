@@ -48,7 +48,7 @@ class BatchExportDialog(QDialog):
     def __init__(
         self,
         video_path: Path,
-        tracks: list[SubtitleTrack],
+        tracks: SubtitleTrack | list[SubtitleTrack],
         parent=None,
         video_has_audio: bool = False,
         overlay_path: Path | None = None,
@@ -62,7 +62,10 @@ class BatchExportDialog(QDialog):
         self.setModal(True)
 
         self._video_path = video_path
-        self._tracks = tracks
+        if isinstance(tracks, SubtitleTrack):
+            self._tracks = [tracks]
+        else:
+            self._tracks = list(tracks)
         self._active_track_index = active_track_index
         self._video_has_audio = video_has_audio
         self._overlay_path = overlay_path
@@ -75,7 +78,7 @@ class BatchExportDialog(QDialog):
         self._output_dir: Path | None = None
 
         # Determine if any selected track has TTS
-        self._has_any_tts = any(any(seg.audio_file for seg in t.segments) for t in tracks)
+        self._has_any_tts = any(any(seg.audio_file for seg in t.segments) for t in self._tracks)
 
         self._build_ui()
 
@@ -358,7 +361,6 @@ class BatchExportDialog(QDialog):
         # Transition to progress phase
         self._options_group.setEnabled(False)
         self._track_list.setEnabled(False)
-        self._mode_group.button(self._mode_video.id()).setEnabled(False) # QButtonGroup usage might differ, simplified below
         self._mode_video.setEnabled(False)
         self._mode_srt.setEnabled(False)
         self._export_btn.setVisible(False)

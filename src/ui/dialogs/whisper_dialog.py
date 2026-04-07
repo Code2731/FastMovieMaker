@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QHBoxLayout,

@@ -358,4 +358,6 @@ class ProjectController:
     def _friendly_conflict_reason(reason: str) -> str:
         if reason == "local_and_remote_changed":
             return tr("Local and remote changed since last sync.")
+        if reason == "remote_changed_requires_reload":
+            return tr("Remote changed since last sync. Reload the project to use the remote version.")
         return reason

@@ -314,7 +314,18 @@ class ProjectSyncService:
             )
 
         # Known last sync state can disambiguate pull/push automatically.
+        # AUTO never overwrites the open project file with remote content because
+        # callers may still hold stale in-memory state and need an explicit reload.
         if last_hash and local_hash == last_hash and remote_hash != last_hash:
+            if policy == SyncPolicy.AUTO:
+                return SyncResult(
+                    SyncResultCode.CONFLICT,
+                    "Remote version changed and requires reload.",
+                    file_key,
+                    local_info=local_info,
+                    remote_info=remote_info,
+                    conflict_reason="remote_changed_requires_reload",
+                )
             return self._pull(
                 project_path,
                 backend_obj,
