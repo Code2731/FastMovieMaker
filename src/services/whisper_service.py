@@ -61,7 +61,7 @@ def transcribe(
     Returns:
         SubtitleTrack with transcribed segments. Returns partial track if cancelled.
     """
-    # "auto" → pass None to faster-whisper for automatic language detection
+    # "auto"이면 None으로 전달해 faster-whisper 자동 감지 활성화
     faster_whisper_language: str | None = None if language == "auto" else language
 
     # chunk_length=5: 5초 단위 청크로 세그먼트가 더 자주 나와 취소 체크가 빨리 반영됨
@@ -72,7 +72,7 @@ def transcribe(
         chunk_length=5,
     )
 
-    # Notify caller of detected language after the first transcription call
+    # 첫 번째 transcribe 호출 후 감지된 언어를 콜백으로 전달
     detected_language = getattr(info, "language", None) or language
     if on_language_detected is not None:
         lang_prob = float(getattr(info, "language_probability", 1.0))

@@ -7,7 +7,7 @@ import logging
 from src.models.subtitle import SubtitleSegment
 
 _LOGGER = logging.getLogger(__name__)
-_MAX_DUCK_WINDOWS = 200  # FFmpeg expression length guard
+_MAX_DUCK_WINDOWS = 200  # FFmpeg 표현식 길이 제한
 
 
 class DuckingService:

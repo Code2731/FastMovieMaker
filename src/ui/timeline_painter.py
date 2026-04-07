@@ -154,7 +154,7 @@ class TimelinePainter:
         self._segment_text_cache: dict[tuple[str, int], str] = {}
         self._visible_window_cache_key: tuple[int, int, int] | None = None
         self._visible_window_cache: tuple[int, int] = (0, 0)
-        # Cache: (track_id, clip_count) → source_color_map — avoids O(n log n) rebuild per paintEvent
+        # (track_id, clip_count) 키 캐시 — paintEvent마다 O(n log n) 재계산 방지
         self._source_color_cache_key: tuple[int, int] | None = None
         self._source_color_cache: dict = {}
         self._render_metrics_enabled = os.getenv("FMM_TIMELINE_RENDER_METRICS", "").strip() == "1"

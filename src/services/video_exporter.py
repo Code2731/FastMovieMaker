@@ -377,7 +377,7 @@ def export_video(
     try:
         export_ass(track, tmp_subs, video_width=ass_w, video_height=ass_h)
 
-        # Write chapter metadata file if markers provided
+        # 마커가 있으면 챕터 메타데이터 파일 작성
         if markers and tmp_meta is not None:
             total_duration_ms = int(_get_video_duration(runner, video_path) * 1000)
             _write_ffmetadata(markers, total_duration_ms, tmp_meta)
@@ -745,9 +745,9 @@ def export_video(
                     str(output_path),
                 ]
 
-        # Inject chapter metadata into the command (both filter_complex and simple paths).
+        # 챕터 메타데이터를 FFmpeg 커맨드에 삽입 (filter_complex/단순 경로 모두 대응)
         if tmp_meta is not None:
-            meta_input_idx = args.count("-i")  # next input index after all existing -i flags
+            meta_input_idx = args.count("-i")  # 기존 -i 플래그 다음 인덱스
             y_idx = args.index("-y")
             args[y_idx:y_idx] = ["-i", str(tmp_meta), "-map_metadata", str(meta_input_idx)]
 

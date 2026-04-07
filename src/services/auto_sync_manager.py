@@ -29,7 +29,7 @@ class AutoSyncManager(QObject):
     it in the status bar without blocking the user.
     """
 
-    sync_message = Signal(str, int)  # (message, timeout_ms); 0 = persistent
+    sync_message = Signal(str, int)  # (메시지, 표시시간ms); 0=영구
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -39,8 +39,6 @@ class AutoSyncManager(QObject):
         self._timer.timeout.connect(self._on_timer)
         self._apply_settings()
 
-    # ------------------------------------------------------------------ public
-
     def set_project_path(self, path: Path | None) -> None:
         """Notify the manager of the current project file path."""
         self._project_path = path
@@ -48,8 +46,6 @@ class AutoSyncManager(QObject):
     def apply_settings(self) -> None:
         """Re-read settings and restart/stop the timer accordingly."""
         self._apply_settings()
-
-    # ----------------------------------------------------------------- private
 
     def _apply_settings(self) -> None:
         enabled = self._settings.get_project_sync_auto_enabled()
@@ -86,9 +82,9 @@ class AutoSyncManager(QObject):
         if result.code == SyncResultCode.SUCCESS:
             self.sync_message.emit("Auto sync completed.", 3000)
         elif result.code == SyncResultCode.NO_CHANGES:
-            pass  # Silently ignore — nothing changed
+            pass  # 변경 없음 — 조용히 무시
         elif result.code == SyncResultCode.CONFLICT:
-            # Don't interrupt the user with a dialog during auto sync.
+            # 자동 동기화 중 충돌은 다이얼로그 없이 상태바로만 알림
             _LOGGER.info("Auto sync skipped: conflict detected for %s", path.name)
             self.sync_message.emit(
                 f"Auto sync: conflict on '{path.name}' — use Sync Now to resolve.", 5000

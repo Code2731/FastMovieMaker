@@ -23,9 +23,9 @@ class WhisperWorker(QObject):
 
     status_update = Signal(str)
     progress = Signal(int, int)
-    segment_ready = Signal(object)     # SubtitleSegment
-    segment_confidence = Signal(object, int)  # (SubtitleSegment, confidence_pct 0-100)
-    language_detected = Signal(str, float)    # (language_code, probability)
+    segment_ready = Signal(object)           # SubtitleSegment
+    segment_confidence = Signal(object, int) # (SubtitleSegment, 신뢰도 0-100)
+    language_detected = Signal(str, float)   # (언어코드, 확률)
     finished = Signal(SubtitleTrack)
     error = Signal(str)
 
@@ -83,7 +83,7 @@ class WhisperWorker(QObject):
                 self.error.emit(str(e))
 
         finally:
-            # Only delete temp WAV if we created it
+            # 직접 생성한 임시 WAV만 삭제
             if should_cleanup_wav and wav_path is not None:
                 try:
                     wav_path.unlink(missing_ok=True)

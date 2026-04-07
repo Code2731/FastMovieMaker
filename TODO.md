@@ -54,7 +54,7 @@
 - [x] ~~영상 두 개 이상일 때 클립 분할 안 되는 문제~~ (수정 완료)
 
 ### 중요 (High)
-- [x] ~~TTS 다이얼로그 진행률 표시 테스트 실패~~ (수정 완료, 927/928 통과)
+- [x] ~~TTS 다이얼로그 진행률 표시 테스트 실패~~ (수정 완료, 987/988 통과)
 
 ### 보통 (Medium)
 - [x] ~~프레임 스냅 활성화 시 UI 피드백~~ (완료 Day 38)
@@ -83,22 +83,25 @@
 - [x] ~~개발자 가이드 (아키텍처, 기여 방법)~~ (`docs/DEVELOPER_GUIDE.md`, Day 42)
 - [ ] 비디오 튜토리얼
 
----
-
-## 📌 최근 완료 / Recently Completed
-
+- ✅ B-Sprint (Day 53) — 프로젝트 로드/조작 안정성(빈 트랙/예외처리), Ducking 가드, 타임라인 렌더링 캐시 최적화 - 2026-04-07
+- ✅ A-Sprint (Day 53) — 챕터 마커(MP4 Chapter) 내보내기, 자막 일괄 스타일 편집, Whisper 자동 언어 감지/신뢰도 표시 - 2026-04-07
+- ✅ Cloud Sync 4단계 (Day 53) — QTimer 기반 배경 주기적 자동 동기화, Preferences UI 연동 - 2026-04-07
 - ✅ APV CI 검증 루프 연결 — GitHub Actions `apv-smoke` 잡 추가(`verify_apv_pipeline.py` + `pytest -m apv_smoke`), 샘플 미주입 시 `SKIPPED` 허용, `APV_SAMPLE_B64` 시크릿 기반 `FMM_APV_SAMPLE` 주입 지원 - 2026-03-07
 - ✅ APV 검증 자동화 — `scripts/verify_apv_pipeline.py` 추가(`FMM_APV_SAMPLE` 기반 PASS/SKIP/FAIL), `apv_smoke` pytest marker 및 스모크 테스트 추가, pre-push 검증 루틴 연동 - 2026-03-07
 - ✅ TTS Provider 플러그인 1단계 — `register_tts_providers()` 동적 로딩, 실패 격리, Edge/ElevenLabs 내장 폴백 고정, `tts/plugin_paths` + `FMM_TTS_PLUGIN_PATHS` 병합 로딩, 관련 테스트/문서 추가 - 2026-03-06
-- ✅ 테스트 수치 재동기화 — `QT_QPA_PLATFORM=offscreen pytest tests/ -q --collect-only` 기준 868 tests collected, `QT_QPA_PLATFORM=offscreen pytest tests/ -q` 기준 868/868 passed 확인 - 2026-03-06
+- ✅ 테스트 수치 재동기화 — `QT_QPA_PLATFORM=offscreen pytest tests/ -q --collect-only` 기준 988 tests collected, `QT_QPA_PLATFORM=offscreen pytest tests/ -q` 기준 987/988 passed 확인 - 2026-04-07
 - ✅ Phase GPU2 — 내보내기 GPU 다단계 폴백 + structured status 이벤트 정리 (`probe/retry/final_encoder`), ExportDialog 인코더 힌트/사유 tooltip 강화, 회귀 테스트 보강 - 2026-03-04
 - ✅ APV 재생 변환 지원 — `VideoLoadWorker`에서 `ffprobe codec_name=apv` 감지 시 플랫폼 무관 MP4 변환 경로 적용, 변환 체인(remux→HW→SW) 테스트 고정 - 2026-03-04
 - ✅ pre-push 품질 루틴 정착 — `scripts/pre_push_checks.sh`(pytest + sync check), `.githooks/pre-push`, `scripts/install_git_hooks.sh` 추가 - 2026-03-04
 - ✅ 실시간 자막 프리뷰 MVP — `WhisperDialog`에 최근 8개 세그먼트 라이브 표시, GUI 테스트 `tests/test_whisper_dialog_preview.py` 추가 - 2026-03-04
 - ✅ CI 문서-테스트 수치 검증 자동화 — `scripts/sync_test_counts.py` 추가(update/check 모드), `.github/workflows/test-count-sync.yml`로 PR/푸시 시 수치 불일치 차단 - 2026-03-04
 - ✅ 개발자 가이드 착수 — `docs/DEVELOPER_GUIDE.md` 신규 작성(로컬 셋업, 아키텍처 원칙, 테스트/PR 체크리스트) - 2026-03-04
-- ✅ 테스트 수치 검증 + 문서 재동기화 — `pytest --collect-only` 기준 928 tests collected, `pytest -q` 기준 927/928 passed 확인, README 수치/배지 갱신 - 2026-03-04
+- ✅ 테스트 수치 검증 + 문서 재동기화 — `pytest --collect-only` 기준 988 tests collected, `pytest -q` 기준 987/988 passed 확인, README 수치/배지 갱신 - 2026-04-07
 - ✅ 문서 동기화 + 테스트 안정화 — README/PROGRESS/TODO 최신화, TTS 진행률 GUI 테스트 픽스, pytest slow 마커 등록 (762 테스트) - 2026-03-04
+
+---
+
+**Last Updated**: 2026-04-07 (Day 53)
 - ✅ Phase PERF/UX3 — gzip 프로젝트 압축(50-70% 파일 크기 감소), 중복 비디오 로드 제거, import 최적화 (744 테스트) - 2026-03-03
 - ✅ Phase ANIM2+CC2 — 자막 애니메이션 인디케이터·일괄 적용, Hue 슬라이더, 트랙 일괄 색보정 (731 테스트) - 2026-03-03
 - ✅ Phase CLIP2 — 멀티 클립 선택 (Ctrl/Shift+클릭), Copy/Paste/Delete N Clips (706 테스트) - 2026-03-03
