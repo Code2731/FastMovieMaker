@@ -154,6 +154,9 @@ class TimelinePainter:
         self._segment_text_cache: dict[tuple[str, int], str] = {}
         self._visible_window_cache_key: tuple[int, int, int] | None = None
         self._visible_window_cache: tuple[int, int] = (0, 0)
+        # Cache: (track_id, clip_count) → source_color_map — avoids O(n log n) rebuild per paintEvent
+        self._source_color_cache_key: tuple[int, int] | None = None
+        self._source_color_cache: dict = {}
         self._render_metrics_enabled = os.getenv("FMM_TIMELINE_RENDER_METRICS", "").strip() == "1"
         self._logger = logging.getLogger(__name__)
 
@@ -810,10 +813,17 @@ class TimelinePainter:
         y = tw._video_track_y(track_idx)
         h = _CLIP_H
 
-        source_paths = {c.source_path for c in track.clips}
-        source_color_map = {}
-        for i, path in enumerate(sorted(source_paths, key=lambda x: str(x) if x is not None else "")):
-            source_color_map[path] = i
+        cache_key = (id(track), len(track.clips))
+        if cache_key != self._source_color_cache_key:
+            source_paths = {c.source_path for c in track.clips}
+            self._source_color_cache = {
+                path: i
+                for i, path in enumerate(
+                    sorted(source_paths, key=lambda x: str(x) if x is not None else "")
+                )
+            }
+            self._source_color_cache_key = cache_key
+        source_color_map = self._source_color_cache
 
         clip_starts = track.clip_boundaries_ms()
         # 로컬 변수 캐싱

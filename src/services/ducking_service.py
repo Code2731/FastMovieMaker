@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from src.models.subtitle import SubtitleSegment
+
+_LOGGER = logging.getLogger(__name__)
+_MAX_DUCK_WINDOWS = 200  # FFmpeg expression length guard
 
 
 class DuckingService:
@@ -38,6 +43,13 @@ class DuckingService:
             return str(base_volume)
 
         merged_windows = DuckingService._merge_windows(active, merge_gap_ms=max(0, int(merge_gap_ms)))
+        if len(merged_windows) > _MAX_DUCK_WINDOWS:
+            _LOGGER.warning(
+                "DuckingService: %d windows exceeds limit (%d); truncating to avoid FFmpeg command overflow.",
+                len(merged_windows),
+                _MAX_DUCK_WINDOWS,
+            )
+            merged_windows = merged_windows[:_MAX_DUCK_WINDOWS]
         attack_s = max(0, int(attack_ms)) / 1000.0
         release_s = max(0, int(release_ms)) / 1000.0
         base = float(base_volume)
