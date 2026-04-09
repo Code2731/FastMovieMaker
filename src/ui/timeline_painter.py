@@ -337,7 +337,7 @@ class TimelinePainter:
         """상단 눈금자."""
         tw = self.tw
         painter.fillRect(0, 0, w, _RULER_H, self._RULER_BG_COLOR)
-        painter.setFont(QFont("Arial", 8))
+        painter.setFont(self._font_arial_8)
         tick_ms = self._nice_tick_interval(visible_ms)
         if tick_ms <= 0:
             return
@@ -423,7 +423,7 @@ class TimelinePainter:
         label_x = max(5, int(tw._ms_to_x(0)) + 5)
         if 0 < label_x < w - 80:
             painter.setPen(QColor(255, 200, 100, 200))
-            painter.setFont(QFont("Arial", 8))
+            painter.setFont(self._font_arial_8)
             painter.drawText(label_x, waveform_y + 10, "Video Audio")
 
     def _render_waveform_image(self, w: int, h: int) -> QImage:
@@ -525,7 +525,7 @@ class TimelinePainter:
         label_x = max(5, int(tw._ms_to_x(0)) + 5)
         if 0 < label_x < w - 120:
             painter.setPen(QColor(150, 150, 150, 150))
-            painter.setFont(QFont("Arial", 8))
+            painter.setFont(self._font_arial_8)
             painter.drawText(label_x, waveform_y + 10, "Video Audio (loading...)")
 
     # ---- Audio / Subtitle ----
@@ -668,7 +668,7 @@ class TimelinePainter:
             painter.drawRoundedRect(rect, 3, 3)
             if rect.width() > 30:
                 painter.setPen(QColor("white"))
-                painter.setFont(QFont("Arial", 8))
+                painter.setFont(self._font_arial_8)
                 text_rect = rect.adjusted(4, 2, -4, -2)
                 painter.drawText(
                     text_rect,
@@ -706,7 +706,7 @@ class TimelinePainter:
             painter.drawRoundedRect(rect, 3, 3)
             if rect.width() > 30:
                 painter.setPen(QColor("white"))
-                painter.setFont(QFont("Arial", 8))
+                painter.setFont(self._font_arial_8)
                 text_rect = rect.adjusted(4, 2, -4, -2)
                 display_text = overlay.text[:20] + "..." if len(overlay.text) > 20 else overlay.text
                 painter.drawText(
@@ -756,7 +756,7 @@ class TimelinePainter:
             painter.drawRoundedRect(rect, 4, 4)
             if rect.width() > 40:
                 painter.setPen(Qt.GlobalColor.white)
-                painter.setFont(QFont("Arial", 8))
+                painter.setFont(self._font_arial_8)
                 label = clip.source_path.name if clip.source_path else "BGM"
                 painter.drawText(
                     rect.adjusted(10, 2, -10, -2),
@@ -772,7 +772,7 @@ class TimelinePainter:
         if not tw._project or not tw._project.markers:
             return
         ms_to_x = tw._ms_to_x
-        painter.setFont(QFont("Arial", 8))
+        painter.setFont(self._font_arial_8)
         for marker in tw._project.markers:
             x = ms_to_x(marker.ms)
             if x < 0 or x > tw.width():
@@ -901,7 +901,7 @@ class TimelinePainter:
                 label += f" ({clip.speed:.2f}x)"
             if rect.width() > 40:
                 painter.setPen(Qt.GlobalColor.white)
-                painter.setFont(QFont("Arial", 8))
+                painter.setFont(self._font_arial_8)
                 painter.drawText(
                     rect.adjusted(10, 2, -10, -2),
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
@@ -947,7 +947,7 @@ class TimelinePainter:
 
             if marker_w > 15:
                 painter.setPen(Qt.GlobalColor.black)
-                painter.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+                painter.setFont(self._font_arial_7b)
                 indicator = clip.transition_out.type[0].upper() if clip.transition_out.type else "T"
                 painter.drawText(marker_rect, Qt.AlignmentFlag.AlignCenter, indicator)
         finally:

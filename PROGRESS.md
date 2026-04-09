@@ -4,9 +4,32 @@
 
 ## 현재 상태 및 미구현 사항
 
-**현재 상태:** Day 53 완료 (2026-04-07)
+**현재 상태:** Day 54 완료 (2026-04-10)
 
 **참고:** 가상환경 Python 3.13 사용 (3.9 호환성 고려 불필요)
+
+---
+
+## 2026-04-10 (Day 54) 작업 요약
+
+**자막 렌더링 최적화 추가 고도화 + simplify 리뷰 반영**
+
+### 1. `timeline_painter.py` — 렌더링 객체 캐시 보완
+- `_font_arial_8`, `_font_arial_7b`: `__init__`에서 1회 생성, 9개소 `QFont("Arial", 8)` 신규 생성 제거
+  - upstream의 `_font_small` / `_segment_pen` 패턴과 통합 (충돌 해결 시 upstream 채택)
+
+### 2. `video_player_widget.py` — 자막/오버레이 스타일 최적화
+- `_subtitle_effect` 단일 인스턴스 재사용: `setGraphicsEffect` 반복 호출 → `setEnabled` 토글로 교체
+- `_font_cache` 추가: 텍스트 오버레이(`_update_text_overlays`) 폰트도 캐시 적용
+- `_apply_style` 캐시 키: upstream의 `_subtitle_font_cache[style_key]` 방식과 통합
+
+### 3. simplify 리뷰 반영
+- `weight` 변수 계산을 캐시 미스 블록 안으로 이동 (불필요한 연산 제거)
+- HOW를 설명하는 불필요 주석 3개 제거
+- 텍스트 오버레이 폰트 생성도 `_font_cache` 사용으로 통일 (자막과 일관성)
+
+### 4. 검증
+- `pytest tests/ -q` (GUI 제외) → **934 passed, 1 skipped**
 
 ---
 

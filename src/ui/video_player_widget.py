@@ -100,6 +100,11 @@ class VideoPlayerWidget(QGraphicsView):
         self._subtitle_item.setZValue(10)
         self._subtitle_item.setVisible(False)
         self._scene.addItem(self._subtitle_item)
+        self._font_cache: dict[tuple, QFont] = {}
+        self._subtitle_effect = QGraphicsDropShadowEffect()
+        self._subtitle_effect.setOffset(0, 0)
+        self._subtitle_effect.setEnabled(False)
+        self._subtitle_item.setGraphicsEffect(self._subtitle_effect)
 
         # Subtitle position editing
         self._edit_mode = False
@@ -197,15 +202,13 @@ class VideoPlayerWidget(QGraphicsView):
         self._subtitle_item.setFont(font)
         self._subtitle_item.setDefaultTextColor(QColor(style.font_color))
 
-        # Outline effect via drop shadow
+        effect = self._subtitle_effect
         if style.outline_width > 0 and style.outline_color:
-            effect = QGraphicsDropShadowEffect()
             effect.setBlurRadius(style.outline_width * 3)
-            effect.setOffset(0, 0)
             effect.setColor(QColor(style.outline_color))
-            self._subtitle_item.setGraphicsEffect(effect)
+            effect.setEnabled(True)
         else:
-            self._subtitle_item.setGraphicsEffect(None)
+            effect.setEnabled(False)
 
     def _get_safe_area(self, scene_rect: QRectF) -> QRectF:
         """Calculate the safe area for subtitles based on current template aspect ratio."""
@@ -460,9 +463,13 @@ class VideoPlayerWidget(QGraphicsView):
             # Apply latest content and style
             text_item.setPlainText(overlay.text)
             style = overlay.style if overlay.style else self._default_style
-            font = QFont(style.font_family, style.font_size)
-            font.setBold(style.font_bold)
-            font.setItalic(style.font_italic)
+            font_key = (style.font_family, style.font_size, style.font_bold, style.font_italic)
+            font = self._font_cache.get(font_key)
+            if font is None:
+                weight = QFont.Weight.Bold if style.font_bold else QFont.Weight.Normal
+                font = QFont(style.font_family, style.font_size, weight)
+                font.setItalic(style.font_italic)
+                self._font_cache[font_key] = font
             text_item.setFont(font)
             text_item.setDefaultTextColor(QColor(style.font_color))
             text_item.setOpacity(overlay.opacity)
