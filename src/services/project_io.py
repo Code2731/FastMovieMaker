@@ -77,24 +77,30 @@ def _segment_to_dict(seg: SubtitleSegment) -> dict:
             "out_duration_ms": a.out_duration_ms,
             "slide_offset_px": a.slide_offset_px,
         }
+    if seg.speaker:
+        d["speaker"] = seg.speaker
     return d
 
 
 def _dict_to_segment(d: dict) -> SubtitleSegment:
-    style = _dict_to_style(d["style"]) if "style" in d else None
-    anim_data = d.get("animation")
-    animation = SubtitleAnimation(**anim_data) if anim_data else None
-    return SubtitleSegment(
-        start_ms=d["start_ms"],
-        end_ms=d["end_ms"],
-        text=d["text"],
-        style=style,
-        audio_file=d.get("audio_file"),
-        volume=d.get("volume", 1.0),
-        voice=d.get("voice"),
-        speed=d.get("speed"),
-        animation=animation,
-    )
+    try:
+        style = _dict_to_style(d["style"]) if "style" in d else None
+        anim_data = d.get("animation")
+        animation = SubtitleAnimation(**anim_data) if anim_data else None
+        return SubtitleSegment(
+            start_ms=d["start_ms"],
+            end_ms=d["end_ms"],
+            text=d["text"],
+            style=style,
+            audio_file=d.get("audio_file"),
+            volume=d.get("volume", 1.0),
+            voice=d.get("voice"),
+            speed=d.get("speed"),
+            animation=animation,
+            speaker=d.get("speaker"),
+        )
+    except KeyError as exc:
+        raise ValueError(f"Subtitle segment data is missing required field: {exc}") from exc
 
 
 def save_project(project: ProjectState, path: Path) -> None:
@@ -152,15 +158,32 @@ def save_project(project: ProjectState, path: Path) -> None:
         },
         "markers": [m.to_dict() for m in project.markers],
     }
-    raw = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    # Keep JSON compact before gzip to reduce save time and output size.
+    raw = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     path.write_bytes(gzip.compress(raw, compresslevel=6))
 
 
 def load_project(path: Path) -> ProjectState:
     """Deserialize a project from a JSON file (v1-v4)."""
-    raw = path.read_bytes()
-    text = gzip.decompress(raw).decode("utf-8-sig") if raw[:2] == b'\x1f\x8b' else raw.decode("utf-8-sig")
-    data = json.loads(text)
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise OSError(f"Cannot read project file '{path}': {exc}") from exc
+
+    try:
+        if raw[:2] == b'\x1f\x8b':
+            text = gzip.decompress(raw).decode("utf-8-sig")
+        else:
+            text = raw.decode("utf-8-sig")
+    except (OSError, EOFError) as exc:
+        raise ValueError(f"Project file is corrupted (gzip): '{path}'") from exc
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"Project file has invalid encoding: '{path}'") from exc
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Project file contains invalid JSON: '{path}'") from exc
     version = data.get("version", 1)
 
     project = ProjectState()

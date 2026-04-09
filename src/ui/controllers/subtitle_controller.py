@@ -26,6 +26,7 @@ from src.ui.commands import (
     EditTextCommand,
     EditTimeCommand,
     EditSegmentTTSCommand,
+    EditSpeakerCommand,
     EditVolumeCommand,
     MergeCommand,
     MoveSegmentCommand,
@@ -58,6 +59,16 @@ class SubtitleController:
             cmd = EditTextCommand(track, index, old_text, new_text)
             self.ctx.undo_stack.push(cmd)
             self.ctx.status_bar().showMessage(f"{tr('Text updated')} ({tr('segment')} {index + 1})")
+
+    def on_speaker_edited(self, index: int, new_speaker: str) -> None:
+        track = self.ctx.project.subtitle_track
+        if 0 <= index < len(track):
+            old_speaker = track[index].speaker
+            # "None" 문자열이 들어오면 실제 None으로 변환
+            new_val = new_speaker if new_speaker.strip() else None
+            cmd = EditSpeakerCommand(track, index, old_speaker, new_val)
+            self.ctx.undo_stack.push(cmd)
+            self.ctx.status_bar().showMessage(f"{tr('Speaker updated')} ({tr('segment')} {index + 1})")
 
     def on_time_edited(self, index: int, start_ms: int, end_ms: int) -> None:
         track = self.ctx.project.subtitle_track
@@ -282,6 +293,38 @@ class SubtitleController:
             cmd = EditAnimationCommand(ctx.project.subtitle_track, index, old_anim, new_anim)
             ctx.undo_stack.push(cmd)
             ctx.project_ctrl.on_document_edited()
+
+    def on_bulk_edit_style(self, indices: list[int]) -> None:
+        """다중 자막 세그먼트 일괄 스타일 편집."""
+        from src.ui.dialogs.style_dialog import StyleDialog
+        from src.ui.commands import EditStyleCommand
+        ctx = self.ctx
+        if not ctx.project.has_subtitles or not indices:
+            return
+        track = ctx.project.subtitle_track
+        valid = [i for i in indices if 0 <= i < len(track)]
+        if not valid:
+            return
+        # Open dialog with the first selected segment's style as baseline
+        baseline_style = (track[valid[0]].style or ctx.project.default_style).copy()
+        dialog = StyleDialog(
+            baseline_style,
+            parent=ctx.window,
+            title=tr("Apply Style to %d Segments") % len(valid),
+        )
+        if not dialog.exec():
+            return
+        new_style = dialog.result_style()
+        ctx.undo_stack.beginMacro(tr("Apply style to %d segments") % len(valid))
+        for idx in valid:
+            old_style = track[idx].style.copy() if track[idx].style else None
+            ctx.undo_stack.push(EditStyleCommand(track, idx, old_style, new_style.copy()))
+        ctx.undo_stack.endMacro()
+        ctx.project_ctrl.on_document_edited()
+        ctx.subtitle_panel.refresh()
+        ctx.status_bar().showMessage(
+            tr("Style applied to %d segment(s)") % len(valid), 3000
+        )
 
     def on_bulk_edit_animation(self, indices: list[int]) -> None:
         """다중 자막 세그먼트 일괄 애니메이션 편집."""

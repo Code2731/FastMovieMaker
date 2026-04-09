@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.models.subtitle import SubtitleTrack
 
 
 @dataclass
@@ -76,6 +80,7 @@ class BatchExportJob:
 
     preset: ExportPreset
     output_path: str
-    status: str = "pending"     # pending / running / completed / failed / skipped
+    track: SubtitleTrack | None = None  # Specific track for this job (None = default)
+    status: str = "pending"             # pending / running / completed / failed / skipped
     error_message: str = ""
     progress_pct: int = 0

@@ -7,3 +7,4 @@ pytest-qt>=4.5.0
 
 # FFmpeg bundling (auto-downloads FFmpeg if not installed)
 imageio-ffmpeg>=0.5.1
+zvec

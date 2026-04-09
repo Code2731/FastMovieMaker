@@ -53,8 +53,8 @@ class TtsVerifyDialog(QDialog):
 
         # 안내 텍스트
         hint = QLabel(tr(
-            "활성 트랙의 TTS 오디오를 Whisper로 재전사합니다.\n"
-            "원본 자막의 타이밍이 실제 발화에 맞게 자동 보정됩니다."
+            "Re-transcribes the active track's TTS audio with Whisper.\n"
+            "Subtitle timing is automatically adjusted to match actual speech."
         ))
         hint.setWordWrap(True)
         layout.addWidget(hint)

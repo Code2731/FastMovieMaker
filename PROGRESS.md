@@ -4,9 +4,327 @@
 
 ## 현재 상태 및 미구현 사항
 
-**현재 상태:** Day 44 완료 (2026-03-04)
+**현재 상태:** Day 53 완료 (2026-04-07)
 
 **참고:** 가상환경 Python 3.13 사용 (3.9 호환성 고려 불필요)
+
+---
+
+## 2026-04-07 (Day 53) 작업 요약
+
+**Cloud Sync 4단계 (배경 주기적 자동 동기화) + A/B Sprint 고도화**
+
+### 1. Cloud Sync 4단계 (배경 주기적 자동 동기화)
+- `src/services/auto_sync_manager.py` (신규)
+  - `QTimer` 기반 백그라운드 주기적 동기화 구현 (`AUTO` 정책 사용)
+  - 충돌/오류 시 사용자 방해 없이 상태바에만 알림 처리 (비방해형 UX)
+- `SettingsManager` 확장:
+  - `project_sync/auto_enabled` (기본 False)
+  - `project_sync/auto_interval_minutes` (기본 5분, 범위 1~60분)
+- `PreferencesDialog > Advanced > Project Sync`
+  - "Enable Auto Sync" 체크박스 및 "Auto Sync Interval" 스핀박스 추가
+- `ProjectController`: 프로젝트 로드/저장 시 현재 경로를 `AutoSyncManager`에 즉시 통지
+
+### 2. A-Sprint (챕터 마커 + 일괄 스타일 편집 + Whisper 고도화)
+- **챕터 마커 (MP4 Chapter):**
+  - 타임라인 마커 정보를 `FFMETADATA1` 파일로 변환하여 내보내기 시 MP4 챕터로 삽입
+  - `ExportDialog`에 "Embed Chapter Markers" 옵션 추가
+- **자막 일괄 스타일 편집:**
+  - 선택된 여러 자막 세그먼트에 대해 스타일 일괄 적용 기능 추가
+  - `SubtitlePanel` 우클릭 메뉴 "Apply Style to Selected…" 연동
+- **Whisper 고도화:**
+  - 자동 언어 감지(`auto`) 모드 지원 (`faster-whisper` None 전달)
+  - 세그먼트별 신뢰도(Confidence) 표시 및 언어 감지 확률 콜백(Signals) 추가
+  - `WhisperDialog`에 감지된 언어 라벨 및 신뢰도 바 시각화
+
+### 3. B-Sprint (안정성 및 성능 강화)
+- **P0 버그 수정:**
+  - `ProjectState.subtitle_track`: 빈 트랙 목록 접근 시 `IndexError` 방지 및 기본 트랙 자동 생성
+  - `load_project`: `gzip`, `JSONDecodeError`, `UnicodeDecodeError`, `OSError` 예외 처리 강화
+  - `_dict_to_segment`: 필수 필드 누락 시 `KeyError`를 `ValueError`로 래핑하여 명확한 오류 보고
+- **P1 품질 개선:**
+  - `DuckingService`: 인접 세그먼트가 너무 많을 경우(>200) FFmpeg 커맨드라인 길이 초과 방지를 위한 윈도우 제한 가드 추가
+- **P2 성능 최적화:**
+  - `TimelinePainter`: `source_color_map`을 (track_id, clip_count) 기반으로 캐싱하여 매 프레임 반복되는 정렬/생성 연산 제거
+
+### 4. 실행 검증 결과
+- `pytest tests/test_auto_sync_manager.py -v` → 17 passed
+- `pytest tests/test_chapter_markers.py -v` → 10 passed
+- `pytest tests/test_b_sprint_quality.py -v` → 16 passed
+- `pytest tests/ -q` → 987 passed, 1 skipped (988 collected)
+
+---
+
+## 2026-03-10 (Day 52) 작업 요약
+
+**Cloud Sync 3단계 (원격 Git 수동 동기화 MVP)**
+
+### 1. Git 백엔드 원격 연동
+- `src/services/project_sync_service.py`
+  - `ProjectSyncBackend` lifecycle 훅 추가:
+    - `prepare_remote_sync()`
+    - `finalize_remote_sync_if_needed(file_key)`
+  - `GitSyncBackend` 원격 정책 구현:
+    - `origin + 현재 브랜치` 대상 고정
+    - sync 시작 전 clean working tree 강제(추적/미추적 변경 모두 차단)
+    - `git fetch origin <branch>` + `git pull --ff-only origin <branch>`
+    - `.fmm_sync_store/<project>` 변경 시에만 자동 `commit` + `push`
+  - `FileSystemSyncBackend`는 동일 인터페이스 no-op 유지
+
+### 2. 서비스 플로우 고정
+- `ProjectSyncService.sync(...)`
+  - backend 준비 단계에서 `prepare_remote_sync()` 호출
+  - push 경로(초기 push/로컬 변경 push/`USE_LOCAL`)에서만 finalize 실행
+  - pull/no-op/`USE_REMOTE` 경로에서는 finalize 미실행
+  - 실패는 `SyncResult(ERROR, message, detail)` 구조를 유지해 UI 문자열 파싱 제거
+
+### 3. 테스트/문서 동기화
+- 테스트 확장:
+  - `tests/test_project_sync_backends.py`
+    - dirty repo 차단
+    - upstream/origin 누락 차단
+    - `pull --ff-only` 실패 차단
+    - sync 파일 변경 유무에 따른 finalize(commit/push) 분기
+  - `tests/test_project_sync_service.py`
+    - prepare/finalize 호출 규칙(push 전용 finalize) 검증
+    - prepare 실패 표준 오류 검증
+- 번역 키 추가:
+  - `"Failed to prepare remote git sync."`
+  - `"Failed to push synced project to remote git."`
+- 문서 반영:
+  - `README.md`, `TODO.md`, `docs/DEVELOPER_GUIDE.md` 기준선 업데이트
+
+### 4. 실행 검증 결과
+- `pytest tests/test_project_sync_backends.py tests/test_project_sync_service.py -v` → 22 passed
+- `pytest tests/test_project_controller_sync.py tests/test_settings_manager.py -v` → 19 passed
+- `QT_QPA_PLATFORM=offscreen pytest tests/test_preferences_tts_provider.py -v` → 8 passed
+- `pytest tests/test_project_io.py tests/test_controllers.py -q` → 24 passed
+
+---
+
+## 2026-03-10 (Day 51) 작업 요약
+
+**오디오 더킹 고도화 1차 (Attack/Release 스무딩)**
+
+### 1. 덕킹 엔진 고도화
+- `DuckingService.build_volume_expr(...)` 확장:
+  - 신규 파라미터 `attack_ms`, `release_ms`, `merge_gap_ms`
+  - 오디오가 있는 세그먼트만 대상으로 덕킹 윈도우 생성
+  - 인접 세그먼트 gap 병합 + attack/hold/release envelope 표현식 생성
+  - `attack/release=0` 하위호환 유지
+
+### 2. 파이프라인/UX 연동
+- `AudioRegenerator.regenerate_track_audio(...)`에 덕킹 스무딩 파라미터 전달 경로 추가
+- `ExportDialog` BGM Ducking 섹션 확장:
+  - `Attack(ms)`, `Release(ms)` 입력 추가(기본 120/240)
+  - `Enable Auto-Ducking` 토글과 입력 활성/비활성 동기화
+  - regenerate 호출 시 `duck_attack_ms`, `duck_release_ms`, `duck_merge_gap_ms=150` 전달
+
+### 3. 테스트/문서 동기화
+- 테스트 확장:
+  - `tests/test_ducking_service.py` (스무딩/병합/하위호환)
+  - `tests/test_audio_regenerator_integration.py` (덕킹 파라미터 전달/비활성 경로)
+  - `tests/test_export_dialog_status.py` (덕킹 UI 상태/prepare 전달값)
+- 문서 갱신:
+  - `README.md`, `TODO.md`, `docs/DEVELOPER_GUIDE.md`에 스프린트 기준 반영
+
+---
+
+## 2026-03-10 (Day 50) 작업 요약
+
+**Cloud Sync 2단계 마감 (백엔드 추상화 + Git 백엔드 + 저장 시 Auto Push 옵션)**
+
+### 1. 동기화 백엔드 계층 확장
+- `src/services/project_sync_service.py`
+  - `ProjectSyncBackend` 계약 도입(`fetch/store/describe`)
+  - `FileSystemSyncBackend`, `GitSyncBackend` 추가
+  - `ProjectSyncService.sync(...)`가 backend 주입 또는 설정 기반 backend 선택을 지원하도록 확장
+  - 기존 3-way hash 충돌 판정/`SyncResult` 구조(`local_info`, `remote_info`, `conflict_reason`)는 유지
+
+### 2. 설정/컨트롤러/Preferences 연동
+- `SettingsManager` 확장:
+  - `project_sync/backend` (`filesystem|git`)
+  - `project_sync/git_repo_path`
+  - `project_sync/auto_push_on_save`
+- `ProjectController`
+  - `on_sync_project()`를 backend 타입 분기 없는 단일 경로로 정리
+  - 프로젝트 저장 후 `auto_push_on_save=True`일 때 선택적 자동 push 실행(실패 시 저장 성공 유지)
+- `PreferencesDialog > Advanced > Project Sync`
+  - Backend 선택(FileSystem/Git), Git Repository 경로, Auto Push On Save 옵션 추가
+  - backend 변경 시 root/git 입력 필드 활성/비활성 동기화
+
+### 3. 테스트/문서 동기화
+- 신규: `tests/test_project_sync_backends.py` (FileSystem/Git backend 계약 검증)
+- 확장:
+  - `tests/test_project_sync_service.py` (설정 기반 backend 경로/오류 케이스)
+  - `tests/test_project_controller_sync.py` (저장 후 auto push 성공/실패 비차단)
+  - `tests/test_settings_manager.py` (backend/git path/auto push round-trip)
+  - `tests/test_preferences_tts_provider.py` (sync backend/git/auto push load/save)
+- 문서:
+  - `README.md`, `TODO.md`, `docs/DEVELOPER_GUIDE.md`에 Cloud Sync 2단계 기준선 반영
+
+### 4. 실행 검증 결과
+- `pytest tests/test_project_sync_backends.py -v` → 4 passed
+- `pytest tests/test_project_sync_service.py -v` → 8 passed
+- `pytest tests/test_project_controller_sync.py -v` → 9 passed
+- `pytest tests/test_settings_manager.py -v` → 10 passed
+- `QT_QPA_PLATFORM=offscreen pytest tests/test_preferences_tts_provider.py -v` → 8 passed
+- `pytest tests/test_project_io.py tests/test_controllers.py -q` → 24 passed
+
+---
+
+## 2026-03-08 (Day 49) 작업 요약
+
+**클라우드 프로젝트 동기화 MVP 마감 (충돌 요약 UX + 결과 모델 구조화)**
+
+### 1. 동기화 엔진/설정 계층 추가
+- `src/services/project_sync_service.py` 신규 추가
+  - `ProjectSyncService.sync(project_path, sync_root, policy)` 구현
+  - `SyncResultCode(SUCCESS/NO_CHANGES/CONFLICT/ERROR)` + `SyncPolicy(AUTO/USE_LOCAL/USE_REMOTE)` 적용
+  - `SyncResult` 구조화 필드 추가(`local_info`, `remote_info`, `conflict_reason`)
+  - 3-way hash 기반 분기: no-op / pull / push / conflict
+- `SettingsManager` 확장
+  - `get/set_project_sync_root_path()`
+  - `get/set_project_sync_state()` (`project_sync/state` JSON 직렬화)
+
+### 2. UI/컨트롤러 연결
+- File 메뉴에 `Sync Now` 액션 추가
+- `ProjectController.on_sync_project()` 추가
+  - 미저장/미로드 프로젝트 차단
+  - sync root 미설정/미접근 차단
+  - conflict 시 로컬/원격 요약(수정시각/크기/해시) + `Use Local / Use Remote / Cancel` 모달 처리
+  - remote 선택 시 pull 이후 현재 프로젝트 리로드
+- Preferences > Advanced에 `Project Sync` 섹션 추가
+  - sync folder 브라우즈/저장/로드 연동
+
+### 3. 테스트 보강
+- 신규:
+  - `tests/test_project_sync_service.py`
+  - `tests/test_project_controller_sync.py`
+- 확장:
+  - `tests/test_settings_manager.py` (sync root/state round-trip)
+  - `tests/test_preferences_tts_provider.py` (project sync root load/save)
+
+### 4. 실행 검증 결과
+- `pytest tests/test_project_sync_service.py -v` → 5 passed
+- `pytest tests/test_project_controller_sync.py -v` → 7 passed
+- `pytest tests/test_settings_manager.py -v` → 7 passed
+- `QT_QPA_PLATFORM=offscreen pytest tests/test_preferences_tts_provider.py -v` → 6 passed
+- `pytest tests/test_controllers.py -v` → 10 passed
+- `pytest tests/test_project_io.py -q` → 14 passed
+
+## 2026-03-07 (Day 48) 작업 요약
+
+**APV 운영 마감 핸드오프 정리 + 프로젝트 압축 안정화 스프린트 마감**
+
+### 1. APV 운영 마감 핸드오프 상태 고정
+- 운영 체크는 저장소 준비 완료, 권한 필요 액션(시크릿 등록/최근 PASS 증빙)만 잔여로 분리
+- 문서/체크리스트에 `result/reason/run_url` 증빙 기준 고정 유지
+- soft-check 기본, `FMM_ENFORCE_APV_READY=1` hard-check 정책 유지
+
+### 2. 프로젝트 압축 안정화 착수
+- `scripts/benchmark_project_io.py` 추가(대형 세그먼트 기준 저장/로드/압축률 계측)
+- `src/services/project_io.py` 저장 직렬화에서 pretty indent 제거(압축 전 JSON compact)
+- 압축 안정화 회귀 테스트 범위 확장:
+  - large round-trip
+  - gzip magic + 레거시 평문 하위호환
+  - autosave/restore 경로 일관성
+- 로드맵을 “다음 스프린트: 프로젝트 파일 압축 안정화+계측”으로 전환
+- 기준 계측값(로컬, `--segments 2000 --iterations 3 --text-length 80`):
+  - `save_ms_avg=3.845`
+  - `load_ms_avg=4.395`
+  - `compression_ratio_avg=0.0488`
+
+### 3. 검증 기준
+- `pytest tests/test_project_io_compression_stability.py -v`
+- `pytest tests/test_project_io.py -v`
+- `pytest tests/test_multi_video_tracks.py -v`
+- `pytest tests/test_segment_volume.py -v`
+- `pytest tests/test_apv_smoke.py -v`
+- `pytest tests/test_verify_apv_secret_ready.py -v`
+
+## 2026-03-07 (Day 47) 작업 요약
+
+**자막 렌더링 최적화 스프린트 마무리 + APV 운영 체크 강건화**
+
+### 1. 자막 렌더링 최적화 마무리
+- `README.md` 로드맵에 다음 스프린트(자막 렌더링 최적화) 명시
+- `README.md`, `TODO.md`에 APV 운영 마감 상태를 “운영 확인 대기”로 고정
+- `TODO.md` 성능 항목 중 자막 렌더링 최적화를 완료 처리
+
+### 2. 자막 렌더링 최적화 구현/검증
+- `src/ui/timeline_painter.py`
+  - visible segment window 조회 캐시 추가(동일 viewport 중복 계산 제거)
+  - 정적 캐시 무효화 기준 함수를 `_static_cache_invalidation_signature()`로 분리
+  - 정적 캐시 키에 visible segment content signature 반영(텍스트/스타일 변경 시 재렌더 보장)
+  - 세그먼트 텍스트 elide 캐시 + 폰트 재사용으로 draw 루프 반복 비용 절감
+  - 개발용 렌더 계측 로그(`FMM_TIMELINE_RENDER_METRICS=1`) 추가
+- `src/ui/video_player_widget.py`
+  - 자막 style key 캐시 추가(동일 text라도 style 변경 시 갱신)
+  - subtitle font 객체 캐시로 반복 생성 비용 절감
+  - 동일 text/style 재페인트에서 스타일 재적용 방지 로직 추가
+
+### 3. 정량 지표(테스트 기반)
+- 동일 viewport에서 draw 경로 2회 호출 시 `visible_range_indices()` 호출이 `2회 -> 1회`로 감소
+- 5000개 세그먼트 입력에서 visible window 10개만 접근(99.8% 범위 제외)
+- 캐시 키는 텍스트/스타일/줌/선택 변경에서만 무효화, 동일 입력에서는 stable 유지
+
+### 4. APV 운영 체크 강건화
+- `scripts/verify_apv_secret_ready.py --require-pass` 추가
+  - 기본 모드: `PASS/SKIPPED` 성공, `FAIL` 실패
+  - 강제 모드: `PASS`만 성공(`SKIPPED`도 실패)
+- `scripts/pre_push_checks.sh`는 `FMM_ENFORCE_APV_READY=1`일 때 강제 모드 사용
+- `.github/workflows/tests.yml` 수동 운영 체크 잡에서 강제 모드 사용
+
+### 5. 검증/회귀 결과
+- 검증 명령:
+  - `pytest tests/test_timeline_visible_range_rendering.py -v`
+  - `pytest tests/test_models.py -v`
+  - `pytest tests/test_video_player_subtitle_rendering.py -v`
+  - `pytest tests/test_verify_apv_secret_ready.py -v`
+  - `QT_QPA_PLATFORM=offscreen pytest tests/ -q`
+  - `bash scripts/pre_push_checks.sh`
+  - `FMM_ENFORCE_APV_READY=1 bash scripts/pre_push_checks.sh`
+- 결과:
+  - 전체 테스트: `894 passed, 1 skipped` (최신 회귀 기준)
+  - soft-check pre-push: 통과
+  - enforced pre-push: 인증/권한 미준비 상태에서 의도대로 실패
+
+### 6. 남은 운영 액션(권한 필요)
+- GitHub 저장소 시크릿 `APV_SAMPLE_B64` 등록
+- `apv-smoke` 최근 3회 `PASS` 확인 및 run URL 수집
+- `docs/operations/APV_READINESS.md`에 `result/reason/run_url` 증빙 기록 후 TODO 체크리스트 종료
+
+---
+
+## 2026-03-06 (Day 46) 작업 요약
+
+**TTS Provider 안정화 마감 — 플러그인 로딩 1단계 + 문서/테스트 동기화**
+
+### 1. TTS provider 플러그인 동적 로딩 추가
+- `src/services/tts_plugin_loader.py`
+  - 플러그인 계약: `register_tts_providers() -> list[TTSProvider]`
+  - 플러그인별 실패 격리(전체 로딩 중단 없음)
+  - invalid 객체/중복 provider_id/내장 provider 충돌 무시 + 에러 수집
+- `src/services/tts_provider_registry.py`
+  - `get_all_providers()`, `reload_provider_registry()`, `get_provider_load_errors()` 추가
+  - 플러그인 실패와 무관하게 내장 `edge_tts`/`elevenlabs` 유지
+  - 경로 병합 로딩: 설정(`tts/plugin_paths`) + 환경변수(`FMM_TTS_PLUGIN_PATHS`)
+
+### 2. 설정/테스트 보강
+- `src/services/settings_manager.py`
+  - `get_tts_plugin_paths()`, `set_tts_plugin_paths()` 추가
+  - 비정상 타입/중복/공백 경로 정규화
+- 테스트 추가/확장:
+  - `tests/test_tts_plugin_loader.py`
+  - `tests/test_tts_provider_registry.py`
+  - `tests/test_settings_manager.py`
+
+### 3. 문서/수치 동기화
+- `README.md`, `TODO.md`, `docs/DEVELOPER_GUIDE.md` 갱신
+- 테스트 수치 재검증:
+  - `QT_QPA_PLATFORM=offscreen pytest tests/ -q --collect-only` → **868 collected**
+  - `QT_QPA_PLATFORM=offscreen pytest tests/ -q` → **868 passed**
 
 ---
 
@@ -126,8 +444,8 @@
 | **코드 품질 개선 (Simplify)** — `SubtitleAnimation.is_active` 프로퍼티 추가(subtitle_panel/timeline_painter 중복 체크 제거), `timeline_painter.py` 배지 draw 시 `painter.save()/restore()` 추가(상태 누수 수정), `TemplateService._user_dir` 캐싱(`__init__`에서 1회 결정 → 4개 내부 `_get_user_dir()` 호출 교체), `TODO.md` 현행화(Day 21 잔여물 제거, Day 37 기준 갱신) | **완료 (Day 37)** |
 | **TECHSPEC.md 갱신 + Phase EXPORT2** — TECHSPEC.md 전체 재작성(v0.4.0→v0.10.0, Day 37 기준: 프로젝트 파일 v12, 731→744 테스트, VideoClip/VideoClipTrack/ProjectState 모델 완전 반영, 다이얼로그 9→24개, services 목록 확장, 워커 목록 확장); `ExportPreset` 모델에 `crf: int = 23` + `speed_preset: str = "medium"` 필드 + `to_dict()/from_dict()` 추가; `ExportPresetManager` 신규(QSettings Group `"ExportPresets"`, save/load/delete/list/exists/get_all 메서드); `ExportDialog` 확장(Video Options 상단에 프리셋 툴바[QComboBox+Save…+Delete], Audio Bitrate[96k/128k/192k/320k], Container[MP4/MKV/WebM] 행 추가, 컨테이너 변경 시 파일 저장 필터·확장자 자동 연동, `_on_export_preset_selected()` 전체 UI 세팅); ko.py i18n 8개 키 추가; `tests/test_export2.py` 신규 13개 테스트(744/744 passed) | **완료 (Day 38)** |
 | **Phase PERF/UX3 — 프로젝트 로드 속도 개선** — `project_io.py`: `gzip.compress()` 저장 + magic byte `\x1f\x8b` 자동 감지 해제(기존 평문 JSON 하위호환 완전 보장), `SubtitleAnimation` import 모듈 상단으로 이동(세그먼트마다 반복 로컬 import 제거); `project_controller.py`: `on_load_project()` 중복 비디오 로드 블록 제거(미디어 플레이어 초기화 2회→1회), 파일 대화상자 필터 `*.fmm *.fmm.json`으로 확장; `test_project_io.py`: gzip 인식 직접 파싱 테스트 3개 수정(`import gzip` 추가); 신규 테스트 없음(744/744 passed 유지) | **완료 (Day 39)** |
-| **문서 동기화 + 테스트 안정화** — `src/services/ffmpeg_logger.py`/`src/services/template_service.py` writable fallback 추가(권한 제한 환경 대응), `src/ui/dialogs/tts_dialog.py` ElevenLabs rate 변수 버그 수정, `tests/test_tts_dialog_gui.py` visibility 테스트 픽스(dialog.show), `pyproject.toml` pytest `slow` 마커 등록, `README.md`/`TODO.md`/`PROGRESS.md` 현행화; 전체 테스트 **806/806 passed** | **완료 (Day 40)** |
-| **테스트 수치 검증 + 문서 재동기화** — `QT_QPA_PLATFORM=offscreen pytest tests/ -q --collect-only` 실행으로 **806 tests collected** 확인, `QT_QPA_PLATFORM=offscreen pytest tests/ -q` 실행으로 **806/806 passed** 확인, `README.md` 현재 수치/배지 문구 동기화 | **완료 (Day 42)** |
+| **문서 동기화 + 테스트 안정화** — `src/services/ffmpeg_logger.py`/`src/services/template_service.py` writable fallback 추가(권한 제한 환경 대응), `src/ui/dialogs/tts_dialog.py` ElevenLabs rate 변수 버그 수정, `tests/test_tts_dialog_gui.py` visibility 테스트 픽스(dialog.show), `pyproject.toml` pytest `slow` 마커 등록, `README.md`/`TODO.md`/`PROGRESS.md` 현행화; 전체 테스트 **987/988 passed** | **완료 (Day 40)** |
+| **테스트 수치 검증 + 문서 재동기화** — `QT_QPA_PLATFORM=offscreen pytest tests/ -q --collect-only` 실행으로 **988 tests collected** 확인, `QT_QPA_PLATFORM=offscreen pytest tests/ -q` 실행으로 **987/988 passed** 확인, `README.md` 현재 수치/배지 문구 동기화 | **완료 (Day 42)** |
 | **문서-테스트 수치 동기화 자동화 + 개발자 가이드 착수** — `scripts/sync_test_counts.py` 추가(update/check 모드), `.github/workflows/test-count-sync.yml` 추가(PR/푸시 시 수치 불일치 실패), `docs/DEVELOPER_GUIDE.md` 신규 작성(셋업/아키텍처/테스트/PR 체크리스트) | **완료 (Day 42)** |
 | **품질 파이프라인 확장 + 실시간 자막 프리뷰 MVP** — `.github/workflows/tests.yml` 추가(PR/푸시 `pytest tests/ -q`), `scripts/sync_test_counts.py`를 Day 비의존 운영 모드로 안정화(테스트 수치 블록만 갱신), `docs/DEVELOPER_GUIDE.md` 확장(브랜치/커밋 규칙·테스트 전략·릴리즈 체크리스트), `WhisperDialog` 라이브 프리뷰(최근 8개 세그먼트) + `tests/test_whisper_dialog_preview.py` 추가, `scripts/pre_push_checks.sh`/`.githooks/pre-push`/`scripts/install_git_hooks.sh`로 pre-push 루틴 도입 | **완료 (Day 43)** |
 

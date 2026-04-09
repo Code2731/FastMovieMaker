@@ -22,16 +22,23 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSpinBox,
     QSlider,
     QVBoxLayout,
 )
 
 from src.models.export_preset import DEFAULT_PRESETS, ExportPreset
+from src.models.image_overlay import ImageOverlay
 from src.models.subtitle import SubtitleTrack
+from src.models.text_overlay import TextOverlay
+from src.models.timeline_marker import TimelineMarker
+from src.models.video_clip import VideoClipTrack
 from src.services.export_preset_manager import ExportPresetManager
 from src.utils.i18n import tr
 from src.workers.export_worker import ExportWorker
 from src.utils.hw_accel import get_hw_info
+
+_TEMP_AUDIO_PREFIX = "export_audio_"
 
 
 class _ThumbSignals(QObject):
@@ -76,9 +83,10 @@ class ExportDialog(QDialog):
         video_has_audio: bool = False,
         overlay_path: Path | None = None,
         overlay_template=None,
-        image_overlays: list | None = None,
-        video_tracks: list | None = None,
-        text_overlays: list | None = None,
+        image_overlays: list[ImageOverlay] | None = None,
+        video_tracks: list[VideoClipTrack] | None = None,
+        text_overlays: list[TextOverlay] | None = None,
+        markers: list[TimelineMarker] | None = None,
     ):
         super().__init__(parent)
         self.setWindowTitle(tr("Export Video"))
@@ -93,6 +101,7 @@ class ExportDialog(QDialog):
         self._image_overlays = image_overlays
         self._video_tracks = video_tracks
         self._text_overlays = text_overlays
+        self._markers = markers
         self._thread: QThread | None = None
         self._worker: ExportWorker | None = None
         self._temp_audio_path: Path | None = None
@@ -211,6 +220,25 @@ class ExportDialog(QDialog):
         self._duck_slider.valueChanged.connect(lambda v: self._duck_label.setText(f"{v}%"))
         ducking_layout.addLayout(duck_row)
 
+        timing_row = QHBoxLayout()
+        timing_row.addWidget(QLabel(tr("Attack (ms):")))
+        self._duck_attack_spin = QSpinBox()
+        self._duck_attack_spin.setRange(0, 5000)
+        self._duck_attack_spin.setValue(120)
+        self._duck_attack_spin.setSuffix(" ms")
+        self._duck_attack_spin.setEnabled(False)
+        timing_row.addWidget(self._duck_attack_spin)
+
+        timing_row.addWidget(QLabel(tr("Release (ms):")))
+        self._duck_release_spin = QSpinBox()
+        self._duck_release_spin.setRange(0, 5000)
+        self._duck_release_spin.setValue(240)
+        self._duck_release_spin.setSuffix(" ms")
+        self._duck_release_spin.setEnabled(False)
+        timing_row.addWidget(self._duck_release_spin)
+        timing_row.addStretch()
+        ducking_layout.addLayout(timing_row)
+
         layout.addWidget(self._ducking_group)
 
         # --- Video options group ---
@@ -322,7 +350,10 @@ class ExportDialog(QDialog):
 
         # GPU Acceleration
         self._gpu_checkbox = QCheckBox(tr("Use Hardware Acceleration (GPU)"))
-        has_hw = any("libx" not in c for c in self._hw_info.get("candidates", []))
+        has_hw = any(
+            not enc.startswith(("libx", "libaom", "libvpx", "libsvt", "lib"))
+            for enc in self._hw_info.get("candidates", [])
+        )
         self._gpu_checkbox.setChecked(has_hw)
         if has_hw:
             self._gpu_checkbox.setToolTip(tr("Hardware acceleration is available on this system."))
@@ -336,6 +367,19 @@ class ExportDialog(QDialog):
                 self._gpu_checkbox.setToolTip(tr("No hardware encoder detected."))
 
         video_layout.addWidget(self._gpu_checkbox)
+
+        has_markers = bool(self._markers)
+        self._chapter_markers_checkbox = QCheckBox(tr("Embed Chapter Markers"))
+        self._chapter_markers_checkbox.setChecked(has_markers)
+        self._chapter_markers_checkbox.setEnabled(has_markers)
+        if not has_markers:
+            self._chapter_markers_checkbox.setToolTip(tr("No timeline markers — add markers to enable chapters."))
+        else:
+            self._chapter_markers_checkbox.setToolTip(
+                tr("{n} marker(s) will be embedded as chapters.").format(n=len(self._markers))
+            )
+        video_layout.addWidget(self._chapter_markers_checkbox)
+
         self._encoder_label = QLabel(f"{tr('Planned encoder:')} —")
         self._encoder_label.setStyleSheet("color: gray; font-size: 11px;")
         video_layout.addWidget(self._encoder_label)
@@ -520,6 +564,8 @@ class ExportDialog(QDialog):
 
     def _on_ducking_toggled(self, checked: bool) -> None:
         self._duck_slider.setEnabled(checked)
+        self._duck_attack_spin.setEnabled(checked)
+        self._duck_release_spin.setEnabled(checked)
 
     # ------------------------------------------------------------------ Export
 
@@ -598,6 +644,7 @@ class ExportDialog(QDialog):
             video_volume=self._bg_slider.value() / 100.0,
             audio_volume=self._tts_slider.value() / 100.0,
             audio_bitrate=self._audio_bitrate_combo.currentText(),
+            markers=self._markers if self._chapter_markers_checkbox.isChecked() else None,
         )
         self._worker.moveToThread(self._thread)
 
@@ -620,9 +667,12 @@ class ExportDialog(QDialog):
         apply_seg_vol = self._seg_vol_checkbox.isChecked()
         ducking_enabled = self._ducking_checkbox.isChecked()
         duck_level = self._duck_slider.value() / 100.0
+        duck_attack_ms = self._duck_attack_spin.value()
+        duck_release_ms = self._duck_release_spin.value()
+        duck_merge_gap_ms = 150
 
         # Create temp output for the mixed audio
-        temp_dir = Path(tempfile.mkdtemp(prefix="export_audio_"))
+        temp_dir = Path(tempfile.mkdtemp(prefix=_TEMP_AUDIO_PREFIX))
         output_audio = temp_dir / f"export_tts_{uuid.uuid4().hex[:8]}.mp3"
 
         # Determine background audio source
@@ -638,6 +688,9 @@ class ExportDialog(QDialog):
             apply_segment_volumes=apply_seg_vol,
             ducking_enabled=ducking_enabled,
             duck_level=duck_level,
+            duck_attack_ms=duck_attack_ms,
+            duck_release_ms=duck_release_ms,
+            duck_merge_gap_ms=duck_merge_gap_ms,
         )
 
         self._temp_audio_path = regenerated_path
@@ -816,7 +869,7 @@ class ExportDialog(QDialog):
         """Remove temporary audio file and its parent directory."""
         if self._temp_audio_path:
             parent = self._temp_audio_path.parent
-            if parent.name.startswith("export_audio_"):
+            if parent.name.startswith(_TEMP_AUDIO_PREFIX):
                 shutil.rmtree(parent, ignore_errors=True)
             elif self._temp_audio_path.exists():
                 self._temp_audio_path.unlink(missing_ok=True)

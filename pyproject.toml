@@ -1,6 +1,6 @@
 [project]
 name = "FastMovieMaker"
-version = "0.4.1"
+version = "0.10.0"
 description = "Whisper-based automatic subtitle video editor"
 requires-python = ">=3.10"
 dependencies = [
@@ -10,10 +10,12 @@ dependencies = [
     "torchaudio>=2.3.0",
     "edge-tts>=7.2.0",
     "imageio-ffmpeg>=0.5.1",
+    "zvec",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow",
+    "apv_smoke: marks APV sample-based smoke tests (requires FMM_APV_SAMPLE)",
 ]

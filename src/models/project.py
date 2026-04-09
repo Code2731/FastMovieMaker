@@ -53,7 +53,13 @@ class ProjectState:
         """Return the active subtitle track (backward-compatible)."""
         if 0 <= self.active_track_index < len(self.subtitle_tracks):
             return self.subtitle_tracks[self.active_track_index]
-        return self.subtitle_tracks[0]
+        if self.subtitle_tracks:
+            return self.subtitle_tracks[0]
+        # Defensive fallback: auto-create a default track rather than raising IndexError.
+        default = SubtitleTrack()
+        self.subtitle_tracks = [default]
+        self.active_track_index = 0
+        return default
 
     @subtitle_track.setter
     def subtitle_track(self, track: SubtitleTrack) -> None:

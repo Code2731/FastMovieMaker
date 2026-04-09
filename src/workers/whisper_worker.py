@@ -23,16 +23,26 @@ class WhisperWorker(QObject):
 
     status_update = Signal(str)
     progress = Signal(int, int)
-    segment_ready = Signal(object)  # Signal(SubtitleSegment) but avoiding circular import issues in signal def
+    segment_ready = Signal(object)           # SubtitleSegment
+    segment_confidence = Signal(object, int) # (SubtitleSegment, 신뢰도 0-100)
+    language_detected = Signal(str, float)   # (언어코드, 확률)
     finished = Signal(SubtitleTrack)
     error = Signal(str)
 
-    def __init__(self, video_path: Path | None = None, audio_path: Path | None = None, model_name: str = "base", language: str = "ko"):
+    def __init__(
+        self,
+        video_path: Path | None = None,
+        audio_path: Path | None = None,
+        model_name: str = "base",
+        language: str = "ko",
+        hf_token: str | None = None,
+    ):
         super().__init__()
         self._video_path = video_path
         self._audio_path = audio_path
         self._model_name = model_name
         self._language = language
+        self._hf_token = hf_token
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -65,6 +75,9 @@ class WhisperWorker(QObject):
                 on_progress=lambda cur, total: self.progress.emit(cur, total),
                 on_segment=lambda seg: self.segment_ready.emit(seg),
                 check_cancelled=lambda: self._cancelled,
+                on_language_detected=lambda lang, prob: self.language_detected.emit(lang, prob),
+                on_segment_confidence=lambda seg, conf: self.segment_confidence.emit(seg, conf),
+                hf_token=self._hf_token,
             )
 
             if not self._cancelled:
@@ -79,7 +92,7 @@ class WhisperWorker(QObject):
                 self.error.emit(str(e))
 
         finally:
-            # Only delete temp WAV if we created it
+            # 직접 생성한 임시 WAV만 삭제
             if should_cleanup_wav and wav_path is not None:
                 try:
                     wav_path.unlink(missing_ok=True)

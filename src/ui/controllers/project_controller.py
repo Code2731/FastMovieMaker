@@ -9,6 +9,13 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from src.services.project_sync_service import (
+    ProjectSyncService,
+    SyncPolicy,
+    SyncResult,
+    SyncResultCode,
+)
+from src.services.settings_manager import SettingsManager
 from src.utils.config import APP_NAME, find_ffmpeg
 from src.utils.i18n import tr
 
@@ -40,8 +47,12 @@ class ProjectController:
             save_project(ctx.project, path)
             ctx.current_project_path = path
             ctx.autosave.set_active_file(path)
+            auto_sync = getattr(ctx, "auto_sync", None)
+            if auto_sync is not None:
+                auto_sync.set_project_path(path)
             self.update_recent_menu()
             ctx.status_bar().showMessage(f"{tr('Project saved')}: {path}")
+            self._maybe_auto_push_on_save(path)
         except Exception as e:
             QMessageBox.critical(ctx.window, tr("Save Error"), str(e))
 
@@ -61,6 +72,9 @@ class ProjectController:
             ctx.current_project_path = path
             ctx.autosave.set_project(project)
             ctx.autosave.set_active_file(path)
+            auto_sync = getattr(ctx, "auto_sync", None)
+            if auto_sync is not None:
+                auto_sync.set_project_path(path)
             ctx.undo_stack.clear()
             ctx.timeline.set_project(project)
 
@@ -90,6 +104,68 @@ class ProjectController:
         except Exception as e:
             QMessageBox.critical(ctx.window, tr("Load Error"), str(e))
 
+    def on_sync_project(self) -> None:
+        """Manually sync the current project with the configured sync folder."""
+        ctx = self.ctx
+        current_path = ctx.current_project_path
+        if current_path is None:
+            QMessageBox.warning(ctx.window, tr("No Project"), tr("Please save or load a project file first."))
+            return
+        if not current_path.is_file():
+            QMessageBox.warning(ctx.window, tr("File Not Found"), tr("Project file does not exist."))
+            return
+
+        # Keep sync source aligned with current in-memory edits.
+        try:
+            from src.services.project_io import save_project
+
+            save_project(ctx.project, current_path)
+        except Exception as exc:
+            QMessageBox.critical(
+                ctx.window,
+                tr("Sync Failed"),
+                tr("Failed to save project before sync.") + f"\n{exc}",
+            )
+            return
+
+        settings = SettingsManager()
+        sync_service = ProjectSyncService(settings=settings)
+        result = sync_service.sync(current_path, policy=SyncPolicy.AUTO)
+        if result.code == SyncResultCode.CONFLICT:
+            choice = self._prompt_sync_conflict(result)
+            if choice is None:
+                ctx.status_bar().showMessage(tr("Sync canceled."), 3000)
+                return
+            result = sync_service.sync(current_path, policy=choice)
+            if result.code == SyncResultCode.SUCCESS and choice == SyncPolicy.USE_REMOTE:
+                self.on_load_project(path=current_path)
+            if choice == SyncPolicy.USE_LOCAL:
+                self._show_sync_result(result, success_message=tr("Project synced using local version."))
+                return
+            if choice == SyncPolicy.USE_REMOTE:
+                self._show_sync_result(result, success_message=tr("Project synced using remote version."))
+                return
+        self._show_sync_result(result)
+
+    def _maybe_auto_push_on_save(self, project_path: Path) -> None:
+        settings = SettingsManager()
+        if not settings.get_project_sync_auto_push_on_save():
+            return
+        sync_service = ProjectSyncService(settings=settings)
+        result = sync_service.sync(project_path, policy=SyncPolicy.USE_LOCAL)
+        if result.code == SyncResultCode.SUCCESS:
+            self.ctx.status_bar().showMessage(tr("Project saved and synced."), 3000)
+            return
+        if result.code == SyncResultCode.NO_CHANGES:
+            self.ctx.status_bar().showMessage(tr("Project saved and sync is up to date."), 3000)
+            return
+        detail = f"\n{result.detail}" if result.detail else ""
+        QMessageBox.warning(
+            self.ctx.window,
+            tr("Sync Failed"),
+            tr("Auto sync failed after save.") + detail,
+        )
+
     # ---- 내보내기 ----
 
     def on_export_video(self) -> None:
@@ -109,11 +185,13 @@ class ProjectController:
         text_overlays = (
             list(ctx.project.text_overlay_track.overlays) if len(ctx.project.text_overlay_track) > 0 else None
         )
+        markers = list(ctx.project.markers) if ctx.project.markers else None
         dialog = ExportDialog(
             ctx.project.video_path, ctx.project.subtitle_track, parent=ctx.window,
             video_has_audio=ctx.project.video_has_audio, overlay_path=overlay_path,
             overlay_template=overlay_template,
             image_overlays=img_overlays, video_tracks=video_tracks, text_overlays=text_overlays,
+            markers=markers,
         )
         dialog.exec()
 
@@ -134,9 +212,10 @@ class ProjectController:
         )
         from src.ui.dialogs.batch_export_dialog import BatchExportDialog
         dialog = BatchExportDialog(
-            ctx.project.video_path, ctx.project.subtitle_track, parent=ctx.window,
+            ctx.project.video_path, ctx.project.subtitle_tracks, parent=ctx.window,
             video_has_audio=ctx.project.video_has_audio, overlay_path=overlay_path,
             image_overlays=img_overlays, text_overlays=text_overlays,
+            active_track_index=ctx.project.active_track_index,
         )
         dialog.exec()
 
@@ -220,3 +299,65 @@ class ProjectController:
 
     def on_document_edited(self) -> None:
         self.ctx.autosave.notify_edit()
+
+    def _prompt_sync_conflict(self, result: SyncResult) -> SyncPolicy | None:
+        box = QMessageBox(self.ctx.window)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(tr("Sync Conflict"))
+        box.setText(tr("Both local and synced versions changed. Choose which one to keep."))
+        box.setInformativeText(tr("Review local and remote summaries before choosing."))
+        box.setDetailedText(self._build_conflict_summary(result))
+        local_btn = box.addButton(tr("Use Local"), QMessageBox.ButtonRole.AcceptRole)
+        remote_btn = box.addButton(tr("Use Remote"), QMessageBox.ButtonRole.AcceptRole)
+        cancel_btn = box.addButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked == local_btn:
+            return SyncPolicy.USE_LOCAL
+        if clicked == remote_btn:
+            return SyncPolicy.USE_REMOTE
+        if clicked == cancel_btn:
+            return None
+        return None
+
+    def _show_sync_result(self, result: SyncResult, success_message: str | None = None) -> None:
+        if result.code == SyncResultCode.SUCCESS:
+            self.ctx.status_bar().showMessage(success_message or tr("Project sync completed."), 3000)
+            return
+        if result.code == SyncResultCode.NO_CHANGES:
+            self.ctx.status_bar().showMessage(tr("Project is already up to date."), 3000)
+            return
+        if result.code == SyncResultCode.CONFLICT:
+            QMessageBox.warning(self.ctx.window, tr("Sync Conflict"), tr(result.message))
+            return
+        detail = f"\n{result.detail}" if result.detail else ""
+        QMessageBox.critical(self.ctx.window, tr("Sync Failed"), tr(result.message) + detail)
+
+    def _build_conflict_summary(self, result: SyncResult) -> str:
+        local_summary = self._format_sync_file_info(tr("Local"), result.local_info)
+        remote_summary = self._format_sync_file_info(tr("Remote"), result.remote_info)
+        lines = [local_summary, "", remote_summary]
+        if result.conflict_reason:
+            lines.extend(["", f"{tr('Reason')}: {self._friendly_conflict_reason(result.conflict_reason)}"])
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_sync_file_info(label: str, info) -> str:
+        if info is None:
+            return f"{label}: {tr('Unavailable')}"
+        hash_short = info.sha256[:8] if info.sha256 else "-"
+        modified = info.modified_at or "-"
+        return (
+            f"{label}: {info.path}\n"
+            f"{tr('Modified')}: {modified}\n"
+            f"{tr('Size')}: {info.size_bytes} {tr('bytes')}\n"
+            f"{tr('Hash')}: {hash_short}"
+        )
+
+    @staticmethod
+    def _friendly_conflict_reason(reason: str) -> str:
+        if reason == "local_and_remote_changed":
+            return tr("Local and remote changed since last sync.")
+        if reason == "remote_changed_requires_reload":
+            return tr("Remote changed since last sync. Reload the project to use the remote version.")
+        return reason

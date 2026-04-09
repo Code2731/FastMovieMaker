@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from src.models.project import ProjectState
 from src.services.autosave import AutoSaveManager
+from src.services.auto_sync_manager import AutoSyncManager
 from src.ui.controllers.app_context import AppContext
 from src.ui.controllers.clip_controller import ClipController
 from src.services.frame_cache_service import FrameCacheService
@@ -56,6 +57,7 @@ class MainWindow(QMainWindow):
         self._project = ProjectState()
         self._autosave = AutoSaveManager(self)
         self._autosave.set_project(self._project)
+        self._auto_sync = AutoSyncManager(self)
         self._undo_stack = QUndoStack(self)
 
         # ---- Media players ----
@@ -106,6 +108,7 @@ class MainWindow(QMainWindow):
         ctx.templates_panel = self._templates_panel
         ctx.track_header = self._track_headers
         ctx.autosave = self._autosave
+        ctx.auto_sync = self._auto_sync
         ctx.pending_seek_timer = self._pending_seek_timer
         ctx.render_pause_timer = self._render_pause_timer
         ctx.frame_cache = self._frame_cache
@@ -135,6 +138,7 @@ class MainWindow(QMainWindow):
         self._pending_seek_timer.timeout.connect(self._playback.on_pending_seek_timeout)
         self._render_pause_timer.timeout.connect(self._playback.on_render_pause)
         self._autosave.save_completed.connect(self._project_ctrl.on_autosave_completed)
+        self._auto_sync.sync_message.connect(self._on_auto_sync_message)
         self._undo_stack.indexChanged.connect(lambda _: self._project_ctrl.on_document_edited())
 
         # ---- Recovery check (UI 필요) ----
@@ -277,13 +281,16 @@ class MainWindow(QMainWindow):
         # Subtitle editing → SubtitleController
         self._subtitle_panel.text_edited.connect(self._subtitle_ctrl.on_text_edited)
         self._subtitle_panel.time_edited.connect(self._subtitle_ctrl.on_time_edited)
-        self._subtitle_panel.segment_add_requested.connect(self._subtitle_ctrl.on_segment_add)
+        self._subtitle_panel.volume_edited.connect(self._subtitle_ctrl.on_segment_volume_edited)
+        self._subtitle_panel.speaker_edited.connect(self._subtitle_ctrl.on_speaker_edited)
+
         self._subtitle_panel.segment_delete_requested.connect(self._subtitle_ctrl.on_segment_delete)
         self._subtitle_panel.style_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_style)
         self._subtitle_panel.volume_edited.connect(self._subtitle_ctrl.on_segment_volume_edited)
         self._subtitle_panel.tts_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_tts)
         self._subtitle_panel.animation_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_animation)
         self._subtitle_panel.bulk_animation_requested.connect(self._subtitle_ctrl.on_bulk_edit_animation)
+        self._subtitle_panel.bulk_style_requested.connect(self._subtitle_ctrl.on_bulk_edit_style)
         self._subtitle_panel.font_changed.connect(self._subtitle_ctrl.on_font_changed)
 
         # Timeline subtitle
@@ -470,6 +477,7 @@ class MainWindow(QMainWindow):
         dialog = PreferencesDialog(self)
         if dialog.exec():
             self.apply_shortcuts()
+            self._auto_sync.apply_settings()
             self.statusBar().showMessage(tr("Preferences updated"))
 
     def _toggle_magnetic_snap(self) -> None:
@@ -675,6 +683,9 @@ class MainWindow(QMainWindow):
         state = settings.value("window_state")
         if state:
             self.restoreState(state)
+
+    def _on_auto_sync_message(self, message: str, timeout_ms: int) -> None:
+        self.statusBar().showMessage(message, timeout_ms)
 
     def closeEvent(self, event) -> None:
         if self._media.is_proxy_generating():

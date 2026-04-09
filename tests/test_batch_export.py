@@ -170,6 +170,16 @@ class TestBatchExportWorkerSignature:
 class TestBatchExportDialogAudioOptions:
     """Test audio options in BatchExportDialog."""
 
+    def test_accepts_single_track_input(self, qtbot):
+        from src.ui.dialogs.batch_export_dialog import BatchExportDialog
+
+        track = SubtitleTrack(segments=[SubtitleSegment(0, 1000, "test")], name="Track 1")
+        dialog = BatchExportDialog(Path("video.mp4"), track, video_has_audio=False)
+        qtbot.addWidget(dialog)
+
+        assert len(dialog._tracks) == 1
+        assert dialog._track_list.count() == 1
+
     def test_mix_audio_checkbox_state(self, qtbot):
         from src.ui.dialogs.batch_export_dialog import BatchExportDialog
         from src.models.subtitle import SubtitleTrack, SubtitleSegment
@@ -227,3 +237,22 @@ class TestBatchExportDialogAudioOptions:
         dialog._tts_checkbox.setChecked(True)
         assert dialog._mix_audio_checkbox.isEnabled()
         assert dialog._bg_slider.isEnabled()
+
+    def test_video_export_path_does_not_call_missing_radio_id(self, qtbot, monkeypatch, tmp_path):
+        from src.ui.dialogs.batch_export_dialog import BatchExportDialog
+        from src.models.subtitle import SubtitleTrack, SubtitleSegment
+
+        track = SubtitleTrack(segments=[SubtitleSegment(0, 1000, "test")])
+        dialog = BatchExportDialog(Path("video.mp4"), track, video_has_audio=False)
+        qtbot.addWidget(dialog)
+
+        started = {"called": False}
+        monkeypatch.setattr(
+            "src.ui.dialogs.batch_export_dialog.QFileDialog.getExistingDirectory",
+            lambda *args, **kwargs: str(tmp_path),
+        )
+        monkeypatch.setattr(dialog, "_start_batch_export", lambda: started.__setitem__("called", True))
+
+        dialog._ask_output_dir_and_start()
+
+        assert started["called"] is True

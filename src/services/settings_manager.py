@@ -1,9 +1,15 @@
 """Settings manager for application preferences."""
 
+import json
+import logging
+import os
 from pathlib import Path
 from typing import Any, Optional
 
 from PySide6.QtCore import QSettings
+
+from src.services.zvec_state_store import ZvecStateStore, _normalize_sync_state
+from src.utils.config import TTSEngine
 
 # 커스터마이징 가능한 단축키 기본값
 _SHORTCUT_DEFAULTS: dict[str, str] = {
@@ -22,12 +28,36 @@ _SHORTCUT_DEFAULTS: dict[str, str] = {
     "paste_clip":        "Ctrl+V",
 }
 
+SHORTCUT_PRESETS: dict[str, dict[str, str]] = {
+    "Default": _SHORTCUT_DEFAULTS,
+    "Premiere Pro": {
+        **_SHORTCUT_DEFAULTS,
+        "split_clip": "Ctrl+K",
+        "play_pause": "Space",
+        "delete": "Shift+Delete",
+    },
+    "Final Cut Pro": {
+        **_SHORTCUT_DEFAULTS,
+        "split_clip": "Ctrl+B",
+        "play_pause": "Space",
+    },
+}
+
 
 class SettingsManager:
     """Wrapper around QSettings for type-safe preference management."""
 
     def __init__(self):
         self._settings = QSettings()
+        self._logger = logging.getLogger(__name__)
+        self._state_store: ZvecStateStore | None = None
+        self._init_state_store()
+        self._migrate_legacy_state_once()
+
+    def __del__(self) -> None:
+        store = getattr(self, "_state_store", None)
+        if store is not None and hasattr(store, "close"):
+            store.close()
 
     # ---------------------------------------------------- General Settings
 
@@ -151,6 +181,14 @@ class SettingsManager:
         """Set the ElevenLabs API key."""
         self._settings.setValue("api_keys/elevenlabs", key)
 
+    def get_huggingface_api_key(self) -> str:
+        """Get the HuggingFace API key (required for speaker diarization)."""
+        return self._settings.value("api_keys/huggingface", "", str)
+
+    def set_huggingface_api_key(self, key: str) -> None:
+        """Set the HuggingFace API key."""
+        self._settings.setValue("api_keys/huggingface", key)
+
     # ---------------------------------------------------- UI Settings
 
     def get_theme(self) -> str:
@@ -187,6 +225,150 @@ class SettingsManager:
         """Set a setting value by key."""
         self._settings.setValue(key, value)
 
+    # ---------------------------------------------------- TTS Settings
+
+    def get_tts_default_provider(self) -> str:
+        """Get default TTS provider id (default: edge_tts)."""
+        value = self._settings.value("tts/default_provider", TTSEngine.EDGE_TTS, str)
+        if not str(value).strip():
+            return TTSEngine.EDGE_TTS
+        return str(value)
+
+    def set_tts_default_provider(self, provider_id: str) -> None:
+        """Set default TTS provider id."""
+        if not str(provider_id).strip():
+            provider_id = TTSEngine.EDGE_TTS
+        self._settings.setValue("tts/default_provider", str(provider_id))
+
+    def get_tts_plugin_paths(self) -> list[str]:
+        """Get configured TTS plugin file paths."""
+        raw_value = self._settings.value("tts/plugin_paths", [])
+        return self._normalize_path_list(raw_value)
+
+    def set_tts_plugin_paths(self, paths: list[str]) -> None:
+        """Set configured TTS plugin file paths."""
+        normalized = self._normalize_path_list(paths)
+        self._settings.setValue("tts/plugin_paths", normalized)
+
+    # ---------------------------------------------------- Project Sync Settings
+
+    def get_project_sync_root_path(self) -> Optional[str]:
+        """Get project sync root folder path."""
+        path = self._settings.value("project_sync/root_path", "", str)
+        token = str(path).strip()
+        return token if token else None
+
+    def set_project_sync_root_path(self, path: Optional[str]) -> None:
+        """Set project sync root folder path."""
+        token = str(path).strip() if path is not None else ""
+        self._settings.setValue("project_sync/root_path", token)
+
+    def get_project_sync_backend(self) -> str:
+        """Get sync backend id (filesystem | git)."""
+        raw = self._settings.value("project_sync/backend", "filesystem", str)
+        token = str(raw).strip().lower()
+        if token not in {"filesystem", "git"}:
+            return "filesystem"
+        return token
+
+    def set_project_sync_backend(self, backend: str) -> None:
+        """Set sync backend id (filesystem | git)."""
+        token = str(backend).strip().lower()
+        if token not in {"filesystem", "git"}:
+            token = "filesystem"
+        self._settings.setValue("project_sync/backend", token)
+
+    def get_project_sync_git_repo_path(self) -> Optional[str]:
+        """Get local git repository path for sync backend."""
+        path = self._settings.value("project_sync/git_repo_path", "", str)
+        token = str(path).strip()
+        return token if token else None
+
+    def set_project_sync_git_repo_path(self, path: Optional[str]) -> None:
+        """Set local git repository path for sync backend."""
+        token = str(path).strip() if path is not None else ""
+        self._settings.setValue("project_sync/git_repo_path", token)
+
+    def get_project_sync_auto_push_on_save(self) -> bool:
+        """Get whether to auto-push sync after manual project save."""
+        return bool(self._settings.value("project_sync/auto_push_on_save", False, bool))
+
+    def set_project_sync_auto_push_on_save(self, enabled: bool) -> None:
+        """Set whether to auto-push sync after manual project save."""
+        self._settings.setValue("project_sync/auto_push_on_save", bool(enabled))
+
+    def get_project_sync_auto_enabled(self) -> bool:
+        """Get whether periodic auto sync is enabled (default: False)."""
+        return bool(self._settings.value("project_sync/auto_enabled", False, bool))
+
+    def set_project_sync_auto_enabled(self, enabled: bool) -> None:
+        """Set whether periodic auto sync is enabled."""
+        self._settings.setValue("project_sync/auto_enabled", bool(enabled))
+
+    def get_project_sync_auto_interval_minutes(self) -> int:
+        """Get the auto sync interval in minutes (default: 5)."""
+        return self._settings.value("project_sync/auto_interval_minutes", 5, int)
+
+    def set_project_sync_auto_interval_minutes(self, minutes: int) -> None:
+        """Set the auto sync interval in minutes."""
+        self._settings.setValue("project_sync/auto_interval_minutes", minutes)
+
+    def get_project_sync_state(self) -> dict[str, dict[str, str]]:
+        """Get per-project sync state map."""
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                return _normalize_sync_state(store.get_sync_state_map())
+            except Exception as exc:
+                self._logger.warning("Failed to read sync state from zvec store: %s", exc)
+        return self._read_legacy_sync_state()
+
+    def set_project_sync_state(self, state: dict[str, dict[str, str]]) -> None:
+        """Set per-project sync state map."""
+        normalized = _normalize_sync_state(state)
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                store.set_sync_state_map(normalized)
+                return
+            except Exception as exc:
+                self._logger.warning("Failed to write sync state to zvec store: %s", exc)
+        payload = json.dumps(normalized, ensure_ascii=False, separators=(",", ":"))
+        self._settings.setValue("project_sync/state", payload)
+
+    def get_recent_files(self) -> list[str]:
+        """Get recent project file paths."""
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                return self._normalize_path_list(store.get_recent_files())
+            except Exception as exc:
+                self._logger.warning("Failed to read recent files from zvec store: %s", exc)
+        return self._normalize_path_list(self._settings.value("recent/files", []))
+
+    def set_recent_files(self, paths: list[str]) -> None:
+        """Set recent project file paths."""
+        normalized = self._normalize_path_list(paths)
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                store.set_recent_files(normalized)
+                return
+            except Exception as exc:
+                self._logger.warning("Failed to write recent files to zvec store: %s", exc)
+        self._settings.setValue("recent/files", normalized)
+
+    def clear_recent_files(self) -> None:
+        """Clear recent project file paths."""
+        store = self._get_state_store()
+        if store is not None:
+            try:
+                store.clear_recent_files()
+                return
+            except Exception as exc:
+                self._logger.warning("Failed to clear recent files in zvec store: %s", exc)
+        self._settings.setValue("recent/files", [])
+
     # ---------------------------------------------------- Shortcut Settings
 
     def get_shortcut(self, action: str) -> str:
@@ -198,3 +380,79 @@ class SettingsManager:
     def set_shortcut(self, action: str, key: str) -> None:
         """Persist the key sequence string for the given action."""
         self._settings.setValue(f"shortcuts/{action}", key)
+
+    def apply_shortcut_preset(self, preset_name: str) -> bool:
+        """Apply a predefined shortcut map."""
+        if preset_name not in SHORTCUT_PRESETS:
+            return False
+        
+        preset_map = SHORTCUT_PRESETS[preset_name]
+        for action, key in preset_map.items():
+            self.set_shortcut(action, key)
+        return True
+
+    @staticmethod
+    def _normalize_path_list(value: Any) -> list[str]:
+        if isinstance(value, str):
+            tokens = value.split(os.pathsep) if os.pathsep in value else [value]
+            return [token.strip() for token in tokens if token and token.strip()]
+        if isinstance(value, (list, tuple, set)):
+            seen: set[str] = set()
+            out: list[str] = []
+            for item in value:
+                token = str(item).strip()
+                if not token or token in seen:
+                    continue
+                seen.add(token)
+                out.append(token)
+            return out
+        return []
+
+    def _init_state_store(self) -> None:
+        self._state_store = ZvecStateStore()
+        if not self._state_store.available:
+            self._logger.warning("zvec state store unavailable: %s", self._state_store.error)
+            self._state_store = None
+
+    def _get_state_store(self) -> ZvecStateStore | None:
+        return getattr(self, "_state_store", None)
+
+    def _read_legacy_sync_state(self) -> dict[str, dict[str, str]]:
+        raw_value = self._settings.value("project_sync/state", "{}", str)
+        if isinstance(raw_value, dict):
+            return _normalize_sync_state(raw_value)
+        try:
+            parsed = json.loads(str(raw_value))
+        except Exception:
+            return {}
+        return _normalize_sync_state(parsed)
+
+    def _migrate_legacy_state_once(self) -> None:
+        store = self._get_state_store()
+        if store is None:
+            return
+        flag_key = "state_store/zvec_migration_v1_done"
+        if bool(self._settings.value(flag_key, False, bool)):
+            return
+        try:
+            db_recent = self._normalize_path_list(store.get_recent_files())
+            legacy_recent = self._normalize_path_list(self._settings.value("recent/files", []))
+            if legacy_recent and not db_recent:
+                store.set_recent_files(legacy_recent)
+
+            db_state = _normalize_sync_state(store.get_sync_state_map())
+            legacy_state = self._read_legacy_sync_state()
+            if legacy_state:
+                merged = dict(db_state)
+                changed = False
+                for key, entry in legacy_state.items():
+                    if key in merged:
+                        continue
+                    merged[key] = entry
+                    changed = True
+                if changed:
+                    store.set_sync_state_map(merged)
+
+            self._settings.setValue(flag_key, True)
+        except Exception as exc:
+            self._logger.warning("Failed to migrate legacy state to zvec store: %s", exc)

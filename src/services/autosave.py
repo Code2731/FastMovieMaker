@@ -6,10 +6,11 @@ import time
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from PySide6.QtCore import QObject, QSettings, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from src.models.project import ProjectState
 from src.services.project_io import save_project, load_project
+from src.services.settings_manager import SettingsManager
 
 
 class AutoSaveManager(QObject):
@@ -34,10 +35,10 @@ class AutoSaveManager(QObject):
         self._autosave_dir.mkdir(parents=True, exist_ok=True)
 
         # Settings
-        self._settings = QSettings()
-        self._autosave_interval = self._settings.value("autosave/interval", 30, int)  # seconds
-        self._idle_timeout = self._settings.value("autosave/idle_timeout", 5, int)    # seconds
-        self._max_recent = self._settings.value("recent/max_files", 10, int)
+        self._settings = SettingsManager()
+        self._autosave_interval = self._settings.get_autosave_interval()
+        self._idle_timeout = self._settings.get_autosave_idle_timeout()
+        self._max_recent = self._settings.get_recent_files_max()
 
         # State
         self._project: Optional[ProjectState] = None
@@ -81,13 +82,13 @@ class AutoSaveManager(QObject):
     def set_autosave_interval(self, seconds: int) -> None:
         """Change the autosave interval."""
         self._autosave_interval = seconds
-        self._settings.setValue("autosave/interval", seconds)
+        self._settings.set_autosave_interval(seconds)
         self._timer.start(seconds * 1000)
 
     def set_idle_timeout(self, seconds: int) -> None:
         """Change the idle timeout before autosaving after edits."""
         self._idle_timeout = seconds
-        self._settings.setValue("autosave/idle_timeout", seconds)
+        self._settings.set_autosave_idle_timeout(seconds)
 
     def check_for_recovery(self) -> Optional[Path]:
         """Check for recovery files on startup.
@@ -117,14 +118,14 @@ class AutoSaveManager(QObject):
 
     def get_recent_files(self) -> List[Path]:
         """Get the list of recent project files."""
-        recent = self._settings.value("recent/files", [])
+        recent = self._settings.get_recent_files()
         if recent:
             return [Path(p) for p in recent if Path(p).is_file()]
         return []
 
     def clear_recent_files(self) -> None:
         """Clear the recent files list."""
-        self._settings.setValue("recent/files", [])
+        self._settings.clear_recent_files()
 
     def _add_recent_file(self, path: Path) -> None:
         """Add a file to the recent files list."""
@@ -142,7 +143,7 @@ class AutoSaveManager(QObject):
             recent_files = recent_files[:self._max_recent]
 
         # Save
-        self._settings.setValue("recent/files", [str(p) for p in recent_files])
+        self._settings.set_recent_files([str(p) for p in recent_files])
 
     def _do_autosave(self) -> None:
         """Perform the actual autosave."""

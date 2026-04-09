@@ -20,7 +20,7 @@ class StylePresetManager:
         """Clean up settings group."""
         try:
             self._settings.endGroup()
-        except:
+        except Exception:
             pass
 
     def save_preset(self, name: str, style: SubtitleStyle) -> None:

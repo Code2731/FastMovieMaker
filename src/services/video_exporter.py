@@ -11,6 +11,7 @@ from typing import Any
 
 from src.models.subtitle import SubtitleTrack
 from src.models.style import SubtitleStyle
+from src.models.timeline_marker import TimelineMarker
 from src.models.video_clip import VideoClipTrack
 from src.models.text_overlay import TextOverlay
 from src.services.settings_manager import SettingsManager
@@ -287,6 +288,27 @@ def _status_event_to_message(event: dict[str, Any]) -> str:
     return event.get("message", "")
 
 
+def _write_ffmetadata(markers: list[TimelineMarker], total_duration_ms: int, dest: Path) -> None:
+    """Write an FFMETADATA1 file with chapter entries from markers.
+
+    Chapters span from one marker to the next (or to total_duration_ms for the last).
+    Markers with empty names receive auto-generated labels ("Chapter 1", "Chapter 2", …).
+    """
+    lines = [";FFMETADATA1\n"]
+    sorted_markers = sorted(markers, key=lambda m: m.ms)
+    for i, marker in enumerate(sorted_markers):
+        start_ms = marker.ms
+        end_ms = sorted_markers[i + 1].ms if i + 1 < len(sorted_markers) else total_duration_ms
+        title = marker.name.strip() or f"Chapter {i + 1}"
+        lines.append("[CHAPTER]\n")
+        lines.append("TIMEBASE=1/1000\n")
+        lines.append(f"START={start_ms}\n")
+        lines.append(f"END={end_ms}\n")
+        lines.append(f"title={title}\n")
+        lines.append("\n")
+    dest.write_text("".join(lines), encoding="utf-8")
+
+
 def export_video(
     video_path: Path,
     track: SubtitleTrack,
@@ -308,6 +330,7 @@ def export_video(
     video_volume: float = 1.0,
     audio_volume: float = 1.0,
     audio_bitrate: str = "192k",
+    markers: list[TimelineMarker] | None = None,
 ) -> None:
     """Burn subtitles into video using FFmpeg's subtitles filter.
 
@@ -332,6 +355,7 @@ def export_video(
         mix_with_original_audio: If True, mix audio_path with video audio instead of replacing it.
         video_volume: Volume multiplier for the original video audio (0.0-1.0+).
         audio_volume: Volume multiplier for the external audio_path (0.0-1.0+).
+        markers: Optional list of TimelineMarker objects to embed as chapter metadata.
     """
     runner = get_ffmpeg_runner()
     if not runner.is_available():
@@ -349,8 +373,14 @@ def export_video(
 
     from src.services.subtitle_exporter import export_ass
     tmp_subs = Path(tempfile.mktemp(suffix=".ass"))
+    tmp_meta = Path(tempfile.mktemp(suffix=".ini")) if markers else None
     try:
         export_ass(track, tmp_subs, video_width=ass_w, video_height=ass_h)
+
+        # 마커가 있으면 챕터 메타데이터 파일 작성
+        if markers and tmp_meta is not None:
+            total_duration_ms = int(_get_video_duration(runner, video_path) * 1000)
+            _write_ffmetadata(markers, total_duration_ms, tmp_meta)
 
         # Escape path for FFmpeg subtitles filter
         subs_str = str(tmp_subs).replace("\\", "/")
@@ -715,6 +745,12 @@ def export_video(
                     str(output_path),
                 ]
 
+        # 챕터 메타데이터를 FFmpeg 커맨드에 삽입 (filter_complex/단순 경로 모두 대응)
+        if tmp_meta is not None:
+            meta_input_idx = args.count("-i")  # 기존 -i 플래그 다음 인덱스
+            y_idx = args.index("-y")
+            args[y_idx:y_idx] = ["-i", str(tmp_meta), "-map_metadata", str(meta_input_idx)]
+
         def _replace_video_encoder_args(
             command: list[str],
             new_encoder: str,
@@ -830,6 +866,8 @@ def export_video(
 
     finally:
         tmp_subs.unlink(missing_ok=True)
+        if tmp_meta is not None:
+            tmp_meta.unlink(missing_ok=True)
 
 
 def _get_video_resolution(runner: "FFmpegRunner", video_path: Path) -> tuple[int, int]:
