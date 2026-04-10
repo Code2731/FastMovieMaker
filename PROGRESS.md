@@ -2188,9 +2188,9 @@ H:\MyProject\FastMovieMaker\
 
 **파이썬 코어 로직 Cython 변환**
 
-### 1. `src/utils/time_utils.py` 및 `src/services/ducking_service.py` Cython 컴파일
-- `setup.py` 추가: `time_utils`와 `ducking_service`를 Cython extension으로 빌드하도록 설정 (`python3 setup.py build_ext --inplace`).
-- 순수 파이썬으로 작성된 시간 변환 연산과 BGM Ducking 연산을 C 확장(Extension) 레벨에서 실행하도록 구조 변경.
+### 1. `src/utils/time_utils.py`, `src/services/ducking_service.py` 및 `src/services/waveform_service.py` Cython 컴파일
+- `setup.py` 추가: `time_utils`, `ducking_service`, `waveform_service`를 Cython extension으로 빌드하도록 설정 (`python3 setup.py build_ext --inplace`).
+- 순수 파이썬으로 작성된 시간 변환 연산, BGM Ducking 연산, 오디오 청크 및 웨이브폼(Peaks) 연산을 C 확장(Extension) 레벨에서 실행하도록 구조 변경.
 - 런타임 성능 및 UI 렌더링 호출(60fps) 환경에서의 병목 가능성 사전 차단.
 - 빌드 산출물(`*.so`, `*.c`)은 `.gitignore`에 추가.
 

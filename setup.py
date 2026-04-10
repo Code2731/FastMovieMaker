@@ -5,6 +5,7 @@ import numpy as np
 extensions = [
     Extension("src.utils.time_utils", ["src/utils/time_utils.py"]),
     Extension("src.services.ducking_service", ["src/services/ducking_service.py"]),
+    Extension("src.services.waveform_service", ["src/services/waveform_service.py"]),
 ]
 
 setup(
