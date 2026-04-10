@@ -84,6 +84,9 @@
 - [x] ~~개발자 가이드 (아키텍처, 기여 방법)~~ (`docs/DEVELOPER_GUIDE.md`, Day 42)
 - [x] ~~비디오 튜토리얼~~ (`docs/VIDEO_TUTORIAL_SCRIPT.md` 제작 완료, Day 54)
 
+### 배포 및 CI/CD (Phase 5)
+- [x] ~~macOS/Windows 릴리즈 자동 배포 파이프라인~~ (GitHub Actions `.dmg` / `.zip` 릴리즈 자동화, Day 54)
+
 - ✅ B-Sprint (Day 53) — 프로젝트 로드/조작 안정성(빈 트랙/예외처리), Ducking 가드, 타임라인 렌더링 캐시 최적화 - 2026-04-07
 - ✅ A-Sprint (Day 53) — 챕터 마커(MP4 Chapter) 내보내기, 자막 일괄 스타일 편집, Whisper 자동 언어 감지/신뢰도 표시 - 2026-04-07
 - ✅ Cloud Sync 4단계 (Day 53) — QTimer 기반 배경 주기적 자동 동기화, Preferences UI 연동 - 2026-04-07

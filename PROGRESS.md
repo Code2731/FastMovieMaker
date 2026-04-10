@@ -2197,7 +2197,15 @@ H:\MyProject\FastMovieMaker\
 ### 2. 검증 및 결과
 - 전체 테스트 슈트(990 tests) 실행 성공, Cython으로 래핑된 상태에서도 정상 작동 확인.
 
-## 2026-04-10 (Day 54 - 문서화)
+## 2026-04-10 (Day 54 - 배포 자동화)
+
+**macOS/Windows 인스톨러 자동 빌드 및 릴리즈 파이프라인 (Phase 5)**
+- `build_macos.sh`: 빌드 결과물 `.app`을 기반으로 `create-dmg`를 사용해 `.dmg` 인스톨러 생성 로직 추가.
+- `build_windows.bat`: 빌드 결과물 디렉토리를 `7-Zip` 또는 `PowerShell`을 사용해 `.zip` 파일로 패키징하는 로직 추가.
+- `.github/workflows/build.yml`:
+  - 릴리즈 태그(`v*`) 푸시 시 자동으로 작동하도록 트리거 설정.
+  - OS별(macOS, Windows) 의존성 설치 및 빌드 스크립트 실행.
+  - 빌드 산출물(`FastMovieMaker-macOS.dmg`, `FastMovieMaker-Windows.zip`)을 Artifact로 업로드 및 `GitHub Release`에 자동 등록하는 파이프라인 구축 완료.
 
 **비디오 튜토리얼 제작 가이드 및 대본 작성**
 - `docs/VIDEO_TUTORIAL_SCRIPT.md` 생성.
