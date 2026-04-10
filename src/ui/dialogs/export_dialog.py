@@ -854,6 +854,8 @@ class ExportDialog(QDialog):
         self._populate_export_preset_combo()
 
     def _on_cancel(self) -> None:
+        if self._worker:
+            self._worker.cancel()
         self._cleanup_thread()
         self._cleanup_temp_audio()
         self.reject()

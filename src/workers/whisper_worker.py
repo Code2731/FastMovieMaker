@@ -59,7 +59,10 @@ class WhisperWorker(QObject):
                 should_cleanup_wav = False
             else:
                 self.status_update.emit("Extracting audio from video...")
-                wav_path = extract_audio_to_wav(self._video_path)
+                wav_path = extract_audio_to_wav(
+                    self._video_path,
+                    check_cancelled=lambda: self._cancelled
+                )
                 should_cleanup_wav = True
 
             if self._cancelled:

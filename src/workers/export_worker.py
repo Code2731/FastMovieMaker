@@ -90,6 +90,10 @@ class ExportWorker(QObject):
         self._audio_volume = audio_volume
         self._audio_bitrate = audio_bitrate
         self._markers = markers
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
 
     def run(self) -> None:
         try:
@@ -107,6 +111,7 @@ class ExportWorker(QObject):
                 self._output_path,
                 on_progress=lambda total, cur: self.progress.emit(total, cur),
                 on_status=_on_status,
+                check_cancelled=lambda: self._cancelled,
                 audio_path=self._audio_path,
                 overlay_path=self._overlay_path,
                 image_overlays=self._image_overlays,

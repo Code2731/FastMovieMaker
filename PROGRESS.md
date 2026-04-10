@@ -2165,3 +2165,21 @@ H:\MyProject\FastMovieMaker\
 - **QGraphicsView + QGraphicsVideoItem**: QVideoWidget 대신 사용하여 자막 오버레이 가능
 - **Worker-moveToThread 패턴**: Whisper가 백그라운드에서 실행되어 UI 멈춤 없음
 - **커스텀 TimelineWidget**: QPainter로 직접 그리기, 줌/스크롤/클릭시크 지원
+
+## 2026-04-10 (Day 54 - 안정성 강화)
+
+**시스템 안정성 강화: FFmpeg 프로세스 수명 주기 관리 및 강제 종료 지원**
+
+### 1. 비디오 내보내기 취소 지원
+- `src/services/video_exporter.py`: `export_video` 내부 FFmpeg 실행을 폴링 로직으로 전환하고 `check_cancelled` 콜백을 통해 사용자가 취소 시 `process.terminate()`를 즉각 호출하도록 수정.
+- `src/workers/export_worker.py`: `cancel()` 메서드 도입 및 취소 상태를 하위 파이프라인에 전달.
+- `src/ui/dialogs/export_dialog.py`: "취소" 버튼 클릭 시 워커에 명시적으로 취소 요청.
+
+### 2. AI 오디오 추출 취소 지원
+- `src/services/audio_extractor.py`: `extract_audio_to_wav` 함수 내부의 FFmpeg 실행을 동기(`run`)에서 비동기(`run_async`)로 변경. 타임아웃 통신 루프를 통해 추출 중에도 프로세스를 안전하게 종료하도록 지원.
+- `src/workers/whisper_worker.py`: 대본 생성 취소 시 오디오 추출 단계부터 즉각 중단되도록 상태 연결.
+- `tests/test_cancel_crash.py`: 변경된 `check_cancelled` 파라미터 시그니처에 맞게 Mock 함수들을 갱신.
+
+### 3. 검증 및 결과
+- 무거운 백그라운드 프로세스의 "좀비화" 및 리소스 누수(Memory/CPU) 원천 차단.
+- `pytest tests/ -v`: 990/990 passed 통과로 회귀 버그 없음 확인.

@@ -315,6 +315,7 @@ def export_video(
     output_path: Path,
     on_progress: callable | None = None,
     on_status: callable | None = None,
+    check_cancelled: callable | None = None,
     audio_path: Path | None = None,
     scale_width: int = 0,
     scale_height: int = 0,
@@ -808,6 +809,10 @@ def export_video(
 
             if process.stdout:
                 for line in process.stdout:
+                    if check_cancelled and check_cancelled():
+                        process.terminate()
+                        break
+                    
                     line = line.strip()
                     if line.startswith("out_time_us="):
                         try:
@@ -827,6 +832,9 @@ def export_video(
         return_code = 1
 
         for idx, (candidate_encoder, candidate_flags, is_hw_encoder) in enumerate(encoder_plan):
+            if check_cancelled and check_cancelled():
+                raise RuntimeError("Export cancelled")
+
             if idx == 0:
                 current_args = _replace_video_encoder_args(args, candidate_encoder, candidate_flags)
             else:
@@ -836,6 +844,9 @@ def export_video(
                 _emit_status({"type": "probe", "encoder": candidate_encoder})
 
             return_code, stderr = _run_once(current_args)
+            if check_cancelled and check_cancelled():
+                raise RuntimeError("Export cancelled")
+
             last_stderr = stderr
             if return_code == 0:
                 _emit_status({"type": "final_encoder", "encoder": candidate_encoder})

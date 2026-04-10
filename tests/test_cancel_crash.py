@@ -210,7 +210,7 @@ class TestCancelCleansUpTempFiles:
         fake_wav = MagicMock(spec=Path)
         fake_wav.unlink = MagicMock(side_effect=lambda **kw: wav_unlinked.set())
 
-        def extract_returns_wav(video_path):
+        def extract_returns_wav(video_path, **kwargs):
             return fake_wav
 
         def mock_transcribe(self, audio_path, **kwargs):

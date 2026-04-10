@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -10,19 +11,24 @@ from src.infrastructure.ffmpeg_runner import get_ffmpeg_runner
 from src.utils.config import AUDIO_SAMPLE_RATE
 
 
-def extract_audio_to_wav(video_path: Path, output_path: Path | None = None) -> Path:
+def extract_audio_to_wav(
+    video_path: Path,
+    output_path: Path | None = None,
+    check_cancelled: callable | None = None,
+) -> Path:
     """Extract audio from video as 16kHz mono WAV for Whisper.
 
     Args:
         video_path: Path to the source video file.
         output_path: Optional output path. If None, creates a temp file.
+        check_cancelled: Optional callback to check if extraction is cancelled.
 
     Returns:
         Path to the extracted WAV file.
 
     Raises:
         FileNotFoundError: If FFmpeg is not found.
-        RuntimeError: If FFmpeg extraction fails.
+        RuntimeError: If FFmpeg extraction fails or is cancelled.
     """
     runner = get_ffmpeg_runner()
     if not runner.is_available():
@@ -44,10 +50,33 @@ def extract_audio_to_wav(video_path: Path, output_path: Path | None = None) -> P
     ]
 
     log_ffmpeg_command(args)
-    result = runner.run(args)
+    process = runner.run_async(
+        args,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
-    if result.returncode != 0:
-        stderr = result.stderr[:500] if result.stderr else ""
+    try:
+        while process.poll() is None:
+            if check_cancelled and check_cancelled():
+                process.terminate()
+                process.wait()
+                raise RuntimeError("Audio extraction cancelled")
+            try:
+                process.communicate(timeout=0.2)
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait()
+
+    if process.returncode != 0:
+        out, err = process.communicate()
+        stderr = (err or "")[:500]
         raise RuntimeError(f"FFmpeg failed:\n{stderr}")
 
     return output_path
