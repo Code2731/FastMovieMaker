@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -84,12 +85,34 @@ class WhisperDialog(QDialog):
         layout.addLayout(lang_layout)
 
         # Speaker Diarization option
-        self._diarize_checkbox = QCheckBox(tr("Enable AI Speaker Diarization"))
         from src.services.settings_manager import SettingsManager
         hf_token = SettingsManager().get_huggingface_api_key()
+
+        self._diarize_checkbox = QCheckBox(tr("Enable AI Speaker Diarization (pyannote.audio)"))
         self._diarize_checkbox.setChecked(bool(hf_token))
-        self._diarize_checkbox.setToolTip(tr("Assign speaker IDs to segments. Requires HuggingFace token in Preferences."))
         layout.addWidget(self._diarize_checkbox)
+
+        self._hf_token_layout = QHBoxLayout()
+        self._hf_token_layout.setContentsMargins(20, 0, 0, 0)
+        self._hf_token_label = QLabel(tr("Hugging Face Token:"))
+        self._hf_token_layout.addWidget(self._hf_token_label)
+
+        self._hf_token_input = QLineEdit()
+        self._hf_token_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self._hf_token_input.setText(hf_token)
+        self._hf_token_input.setPlaceholderText("hf_...")
+        self._hf_token_input.setEnabled(self._diarize_checkbox.isChecked())
+        self._hf_token_layout.addWidget(self._hf_token_input, 1)
+
+        layout.addLayout(self._hf_token_layout)
+
+        self._diarize_hint = QLabel(tr("Requires a valid token with access to 'pyannote/speaker-diarization-3.1'.\nToken will be saved to Preferences."))
+        self._diarize_hint.setProperty("class", "hint")
+        self._diarize_hint.setWordWrap(True)
+        self._diarize_hint.setContentsMargins(20, 0, 0, 8)
+        layout.addWidget(self._diarize_hint)
+
+        self._diarize_checkbox.toggled.connect(self._hf_token_input.setEnabled)
 
         # Status
         self._status_label = QLabel(tr("Ready"))
@@ -165,7 +188,12 @@ class WhisperDialog(QDialog):
             return
 
         from src.services.settings_manager import SettingsManager
-        hf_token = SettingsManager().get_huggingface_api_key() if self._diarize_checkbox.isChecked() else None
+        if self._diarize_checkbox.isChecked():
+            hf_token = self._hf_token_input.text().strip()
+            if hf_token:
+                SettingsManager().set_huggingface_api_key(hf_token)
+        else:
+            hf_token = None
 
         # Worker + Thread setup
         self._thread = QThread()

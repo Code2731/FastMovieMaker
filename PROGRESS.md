@@ -2211,3 +2211,10 @@ H:\MyProject\FastMovieMaker\
 - `docs/VIDEO_TUTORIAL_SCRIPT.md` 생성.
 - 신규 사용자를 위한 3~5분 분량의 "Quick Start & Core Features" 비디오 튜토리얼 스토리보드 및 대본(Script) 작성 완료.
 - 영상 촬영 시 필요한 화면 연출 및 나레이션 가이드라인 제공.
+
+## 2026-04-10 (Day 54 - 기능 추가)
+
+**화자 분리(Speaker Diarization) UI 연동 고도화 (Phase 5)**
+- `src/ui/dialogs/whisper_dialog.py`: 기존에 설정(Preferences)에 숨겨져 있던 Hugging Face 토큰 입력란을 `WhisperDialog` 내부에 명시적으로 노출되도록 UI 개편.
+- 사용자가 "Enable AI Speaker Diarization" 체크박스를 활성화하면 토큰 입력란이 활성화되며, 여기서 입력된 토큰은 자막 생성 시작 시 자동으로 `SettingsManager`에 저장되어 이후 작업에도 유지되도록 연동.
+- 이를 통해 다화자 영상을 다루는 사용자들이 복잡한 환경 설정 메뉴를 거치지 않고도, 자막 추출 단계에서 직관적으로 `pyannote.audio` 화자 분리 기능을 사용할 수 있도록 사용성 극대화.

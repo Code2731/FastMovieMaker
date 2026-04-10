@@ -64,6 +64,9 @@
 
 ## 📋 백로그 / Backlog
 
+### 기능 추가 (Phase 5)
+- [x] ~~화자 분리(Speaker Diarization) UI 연동~~ (`WhisperDialog` 내 토큰 직접 입력 및 저장 연동, Day 54)
+
 ### 기능 추가
 - [x] ~~GPU 가속 비디오 렌더링~~ (GPU2 다단계 폴백 + structured status 완료, Day 44)
 - [x] ~~AI 기반 자막 번역 (DeepL/GPT)~~ (완료, Phase 4 Week 2)
