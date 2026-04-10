@@ -1,3 +1,5 @@
+[한국어](README.md) | [English](README_EN.md)
+
 # FastMovieMaker
 
 > 🎬 AI 기반 자막 생성 및 편집을 지원하는 전문 비디오 에디터
