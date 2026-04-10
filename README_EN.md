@@ -8,8 +8,16 @@
 
 [![Python](https://img.shields.io/badge/Python-3.13%2B-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.10-green.svg)](https://pypi.org/project/PySide6/)
-[![Tests](https://img.shields.io/badge/tests-987%20passed%20%2F%20988%20collected-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-990%20passed%20%2F%20990%20collected-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+<div align="center">
+  <h2>🚀 Download v1.0.0</h2>
+  <a href="https://github.com/Code2731/FastMovieMaker/releases/latest"><img src="https://img.shields.io/badge/macOS-Download_.dmg-white?style=for-the-badge&logo=apple" alt="Download macOS"></a>
+  <a href="https://github.com/Code2731/FastMovieMaker/releases/latest"><img src="https://img.shields.io/badge/Windows-Download_.zip-blue?style=for-the-badge&logo=windows" alt="Download Windows"></a>
+  <br>
+  <sub>* Universal Binary for Apple Silicon (M1/M2/M3) and Intel Macs.</sub>
+</div>
 
 <p align="center">
   <img src="resources/FastMovieMaker.png" alt="FastMovieMaker Screenshot" width="800">
@@ -88,7 +96,7 @@
 ### Setup
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/FastMovieMaker.git
+git clone https://github.com/Code2731/FastMovieMaker.git
 cd FastMovieMaker
 
 # Create a virtual environment

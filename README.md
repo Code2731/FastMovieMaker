@@ -8,8 +8,16 @@
 
 [![Python](https://img.shields.io/badge/Python-3.13%2B-blue.svg)](https://www.python.org/)
 [![PySide6](https://img.shields.io/badge/PySide6-6.10-green.svg)](https://pypi.org/project/PySide6/)
-[![Tests](https://img.shields.io/badge/tests-987%20passed%20%2F%20988%20collected-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-990%20passed%20%2F%20990%20collected-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+<div align="center">
+  <h2>🚀 Download v1.0.0</h2>
+  <a href="https://github.com/Code2731/FastMovieMaker/releases/latest"><img src="https://img.shields.io/badge/macOS-Download_.dmg-white?style=for-the-badge&logo=apple" alt="Download macOS"></a>
+  <a href="https://github.com/Code2731/FastMovieMaker/releases/latest"><img src="https://img.shields.io/badge/Windows-Download_.zip-blue?style=for-the-badge&logo=windows" alt="Download Windows"></a>
+  <br>
+  <sub>* Apple Silicon(M1/M2/M3) 및 Intel Mac을 모두 지원합니다.</sub>
+</div>
 
 <p align="center">
   <img src="resources/FastMovieMaker.png" alt="FastMovieMaker Screenshot" width="800">
@@ -366,26 +374,6 @@ track.clips[1].source_path = "path/to/video_b.mp4"
 
 ---
 
-## 🎯 로드맵
-
-- [x] 자막 렌더링 최적화 (Day 47 완료, visible-window/caching 회귀 테스트 고정)
-- ⏳ APV 운영 마감 종료 대기 (운영 담당자: `APV_SAMPLE_B64` 등록 + 최근 `apv-smoke` PASS + readiness PASS 증빙)
-- [x] 프로젝트 파일 압축 안정화+계측 (Day 48 완료, gzip compact 직렬화 + 계측/회귀 테스트 고정)
-- [x] 클라우드 프로젝트 동기화 MVP (Day 49 완료, 로컬 폴더 백엔드 + 수동 Sync Now + 충돌 요약 모달)
-- [x] Cloud Sync 2단계 (Day 50 완료, 백엔드 추상화 + FileSystem/Git + 선택적 Auto Push on Save)
-- [x] Cloud Sync 3단계 (Day 52 완료, origin/current branch 수동 원격 동기화 + dirty repo 차단 + ff-only pull)
-- [x] 오디오 더킹 고도화 1차 — Attack/Release 스무딩 (Day 51)
-- [x] Cloud Sync 3단계 hardening — Git timeout, 타입 힌트, zvec 상태 저장소 통합 (Day 52)
-- [x] 코드 품질 개선 (Simplify) — 중복 normalize 제거, `finalize_remote_sync` 파라미터 정리, `ZvecStateStore` 리소스 정리
-- [x] Whisper 변환 중 실시간 자막 미리보기 (v0.9.6)
-- [x] 타임라인 마커 시스템 — M 키, 컬러 레이블, Undo/Redo (Phase D3)
-- [x] 컬러 보정 타임라인 인디케이터 — 보정된 클립 뱃지 표시 (Phase D3)
-- [x] 커스텀 TTS 제공자를 위한 플러그인 시스템
-- [ ] 클라우드 프로젝트 동기화 (MVP/2/3단계 완료, 자동 스케줄 동기화는 후속)
-- 🔄 다음: **테스트 수치 문서 동기화** 및 APV 시크릿 운영 마감
-
----
-
 ## 📝 라이선스
 
 MIT 라이선스 - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
@@ -433,5 +421,5 @@ ruff check src/ tests/
 ---
 
 <div align="center">
-Made with ❤️ by [Your Name]
+Made with ❤️ by the FastMovieMaker Team
 </div>
