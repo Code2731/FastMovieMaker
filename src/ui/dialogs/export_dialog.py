@@ -151,7 +151,7 @@ class ExportDialog(QDialog):
 
         if not self._has_tts:
             hint = QLabel(tr("(No TTS audio in this track)"))
-            hint.setStyleSheet("color: gray; font-size: 11px;")
+            hint.setProperty("class", "hint")
             options_layout.addWidget(hint)
 
         # Mix with original audio checkbox
@@ -381,7 +381,7 @@ class ExportDialog(QDialog):
         video_layout.addWidget(self._chapter_markers_checkbox)
 
         self._encoder_label = QLabel(f"{tr('Planned encoder:')} —")
-        self._encoder_label.setStyleSheet("color: gray; font-size: 11px;")
+        self._encoder_label.setProperty("class", "hint")
         video_layout.addWidget(self._encoder_label)
 
         layout.addWidget(self._video_group)

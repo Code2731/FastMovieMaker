@@ -520,7 +520,55 @@ QDialogButtonBox QPushButton {
     min-width: 80px;
 }
 
-/* ── QLabel (no global override, keep palette) ───────────────── */
+/* ── Custom Widgets ──────────────────────────────────────────── */
+
+QWidget#ZoomToolbar {
+    background-color: #282828;
+    border-top: 1px solid #3c3c3c;
+}
+
+QPushButton#ToolbarButton {
+    background: #3c3c3c;
+    color: #fff;
+    border: 1px solid #505050;
+    border-radius: 3px;
+    padding: 1px 8px;
+    font-size: 12px;
+}
+
+QPushButton#ToolbarButton:hover {
+    background: #505050;
+}
+
+QPushButton#ToolbarButton:checked {
+    background: #3c8cdc;
+    border-color: #5aa0e6;
+}
+
+QLabel#ZoomLabel {
+    color: #b4b4b4;
+    font-size: 11px;
+    border: none;
+}
+
+QLabel.hint {
+    color: #888888;
+    font-size: 11px;
+}
+
+QLabel.info {
+    color: #aaaaaa;
+    font-style: italic;
+}
+
+QLabel.error {
+    color: #ff6666;
+}
+
+QLabel#ThumbPreview {
+    background: #333333;
+    color: #888888;
+}
 
 /* ── QFontComboBox ───────────────────────────────────────────── */
 

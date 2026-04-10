@@ -31,6 +31,8 @@ from src.models.video_clip import VideoClip, VideoClipTrack
 from src.services.waveform_service import WaveformData
 from src.utils.time_utils import ms_to_display
 
+from src.ui.styles.theme import TimelineTheme
+
 if TYPE_CHECKING:
     from src.ui.timeline_widget import TimelineWidget
 
@@ -46,99 +48,61 @@ _BGM_H = 34
 class TimelinePainter:
     """TimelineWidget 전용 렌더러 — 모든 _draw_* 메서드를 소유."""
 
-    # ---- 색상/스타일 상수 ----
-    # Background
-    _BG_COLOR = QColor(18, 18, 18)
-    _RULER_BG_COLOR = QColor(25, 25, 25)
-    _RULER_COLOR = QColor(60, 60, 60)
-    _RULER_TEXT_COLOR = QColor(140, 140, 140)
+    # ---- 색상/스타일 (Theme에서 로드) ----
+    _BG_COLOR = TimelineTheme.BG
+    _RULER_BG_COLOR = TimelineTheme.RULER_BG
+    _RULER_COLOR = TimelineTheme.RULER_TICK
+    _RULER_TEXT_COLOR = TimelineTheme.RULER_TEXT
 
-    # Subtitle Segments
-    _SEGMENT_COLOR_TOP = QColor(60, 140, 220)
-    _SEGMENT_COLOR_BOT = QColor(40, 100, 180)
-    _SEGMENT_BORDER = QColor(80, 170, 255)
-    _SELECTED_BORDER = QColor(100, 220, 255)
-    _SELECTED_GLOW = QColor(100, 220, 255, 60)
+    _SEGMENT_COLOR_TOP = TimelineTheme.SEGMENT_TOP
+    _SEGMENT_COLOR_BOT = TimelineTheme.SEGMENT_BOT
+    _SEGMENT_BORDER = TimelineTheme.SEGMENT_BORDER
+    _SELECTED_BORDER = TimelineTheme.SELECTED_BORDER
+    _SELECTED_GLOW = TimelineTheme.SELECTED_GLOW
 
-    # Snap
-    _SNAP_GUIDE_COLOR = QColor(255, 255, 0, 200)
+    _SNAP_GUIDE_COLOR = TimelineTheme.SNAP_GUIDE
+    _PLAYHEAD_COLOR = TimelineTheme.PLAYHEAD
+    _PLAYHEAD_LINE_COLOR = TimelineTheme.PLAYHEAD_LINE
 
-    # Playhead
-    _PLAYHEAD_COLOR = QColor(255, 60, 80)
-    _PLAYHEAD_LINE_COLOR = QColor(255, 60, 80, 200)
+    _AUDIO_COLOR_TOP = TimelineTheme.AUDIO_TOP
+    _AUDIO_BORDER = TimelineTheme.AUDIO_BORDER
 
-    # Audio (TTS)
-    _AUDIO_COLOR_TOP = QColor(80, 180, 100)
-    _AUDIO_BORDER = QColor(100, 200, 120)
+    _BGM_COLOR_TOP = TimelineTheme.BGM_TOP
+    _BGM_COLOR_BOT = TimelineTheme.BGM_BOT
+    _BGM_BORDER = TimelineTheme.BGM_BORDER
+    _BGM_SELECTED_BORDER = TimelineTheme.BGM_SELECTED_BORDER
+    _BGM_SELECTED_COLOR = TimelineTheme.BGM_SELECTED_BG
 
-    # BGM
-    _BGM_COLOR_TOP = QColor(100, 80, 200)
-    _BGM_COLOR_BOT = QColor(60, 40, 160)
-    _BGM_BORDER = QColor(130, 100, 240)
-    _BGM_SELECTED_BORDER = QColor(100, 220, 255)
-    _BGM_SELECTED_COLOR = QColor(40, 20, 100)
+    _CORRECTION_BADGE_BRUSH = TimelineTheme.CORRECTION_BADGE
+    _ANIMATION_BADGE_BRUSH = TimelineTheme.ANIMATION_BADGE
 
-    # Color Correction Badge
-    _CORRECTION_BADGE_BRUSH = QBrush(QColor(255, 210, 60, 220))
+    _WAVEFORM_FILL = TimelineTheme.WAVEFORM_FILL
+    _WAVEFORM_EDGE = TimelineTheme.WAVEFORM_EDGE
+    _WAVEFORM_CENTER = TimelineTheme.WAVEFORM_CENTER
 
-    # Animation Badge (파란 원형)
-    _ANIMATION_BADGE_BRUSH = QBrush(QColor(80, 160, 255, 220))
-
-    # Waveform
-    _WAVEFORM_FILL = QColor(255, 140, 40, 120)
-    _WAVEFORM_EDGE = QColor(255, 180, 80, 200)
-    _WAVEFORM_CENTER = QColor(255, 220, 150)
-
-    # Volume Envelope
-    _VOLUME_LINE_COLOR = QColor(255, 255, 255, 200)
-    _VOLUME_POINT_COLOR = QColor(255, 255, 255)
+    _VOLUME_LINE_COLOR = TimelineTheme.VOLUME_LINE
+    _VOLUME_POINT_COLOR = TimelineTheme.VOLUME_POINT
     _VOLUME_POINT_RADIUS = 4
 
-    # Image Overlay
-    _IMG_OVERLAY_COLOR = QColor(160, 90, 220, 180)
-    _IMG_OVERLAY_BORDER = QColor(190, 120, 240)
-    _IMG_OVERLAY_SELECTED_BORDER = QColor(100, 220, 255)
-    _IMG_OVERLAY_SELECTED_COLOR = QColor(0, 100, 140)
+    _IMG_OVERLAY_COLOR = TimelineTheme.IMG_OVERLAY
+    _IMG_OVERLAY_BORDER = TimelineTheme.IMG_OVERLAY_BORDER
+    _IMG_OVERLAY_SELECTED_BORDER = TimelineTheme.SELECTED_BORDER
+    _IMG_OVERLAY_SELECTED_COLOR = TimelineTheme.IMG_OVERLAY_SELECTED_BG
 
     # Text Overlay
-    _TEXT_OVERLAY_COLOR = QColor(255, 180, 80, 180)
-    _TEXT_OVERLAY_BORDER = QColor(255, 200, 120)
-    _TEXT_OVERLAY_SELECTED_COLOR = QColor(255, 140, 40)
-    _TEXT_OVERLAY_SELECTED_BORDER = QColor(255, 220, 160)
+    _TEXT_OVERLAY_COLOR = TimelineTheme.TEXT_OVERLAY
+    _TEXT_OVERLAY_BORDER = TimelineTheme.TEXT_OVERLAY_BORDER
+    _TEXT_OVERLAY_SELECTED_COLOR = TimelineTheme.TEXT_OVERLAY_SELECTED_BG
+    _TEXT_OVERLAY_SELECTED_BORDER = TimelineTheme.TEXT_OVERLAY_SELECTED_BORDER
 
     # Clip Colors
-    _CLIP_SELECTED_BORDER = QColor(100, 220, 255)
-    _CLIP_SELECTED_COLOR = QColor(0, 100, 140)
-    _TRANSITION_MARKER_COLOR = QColor(255, 215, 0, 180)
+    _CLIP_SELECTED_BORDER = TimelineTheme.CLIP_SELECTED_BORDER
+    _CLIP_SELECTED_COLOR = TimelineTheme.CLIP_SELECTED_BG
+    _TRANSITION_MARKER_COLOR = TimelineTheme.TRANSITION_MARKER
 
-    _SOURCE_COLORS = [
-        (QColor(0, 160, 160), QColor(0, 120, 120), QColor(0, 200, 200)),
-        (QColor(200, 120, 40), QColor(160, 90, 20), QColor(230, 150, 60)),
-        (QColor(140, 70, 190), QColor(100, 40, 150), QColor(170, 100, 220)),
-        (QColor(60, 160, 80), QColor(40, 120, 50), QColor(90, 190, 110)),
-        (QColor(200, 60, 80), QColor(150, 40, 60), QColor(230, 90, 110)),
-        (QColor(70, 110, 200), QColor(40, 80, 160), QColor(100, 140, 230)),
-    ]
-
-    # 마커 색상
-    _MARKER_COLORS: dict[str, QColor] = {
-        "yellow": QColor(255, 220, 50),
-        "red":    QColor(220, 80,  80),
-        "green":  QColor(80,  200, 80),
-        "blue":   QColor(80,  150, 220),
-        "white":  QColor(220, 220, 220),
-    }
-
-    # 컬러 레이블 색상: (top, bottom, border)
-    _LABEL_COLORS: dict[str, tuple[QColor, QColor, QColor]] = {
-        "red":    (QColor(220, 80, 80),   QColor(180, 50, 50),   QColor(255, 110, 110)),
-        "orange": (QColor(220, 150, 70),  QColor(180, 110, 40),  QColor(255, 180, 100)),
-        "yellow": (QColor(200, 200, 70),  QColor(160, 160, 40),  QColor(230, 230, 100)),
-        "green":  (QColor(80, 180, 80),   QColor(50, 140, 50),   QColor(110, 210, 110)),
-        "blue":   (QColor(70, 130, 220),  QColor(40, 90, 180),   QColor(100, 160, 255)),
-        "purple": (QColor(160, 80, 200),  QColor(120, 40, 160),  QColor(190, 110, 230)),
-        "pink":   (QColor(220, 100, 160), QColor(180, 60, 120),  QColor(255, 130, 190)),
-    }
+    _SOURCE_COLORS = TimelineTheme.SOURCE_COLORS
+    _MARKER_COLORS = TimelineTheme.MARKER_COLORS
+    _LABEL_COLORS = TimelineTheme.LABEL_COLORS
 
     def __init__(self, tw: TimelineWidget) -> None:
         self.tw = tw

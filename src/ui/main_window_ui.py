@@ -83,45 +83,37 @@ def build_main_window_ui(window, player, audio_output, tts_audio_output, wavefor
     timeline_outer_layout.addWidget(window._timeline, 1)
 
     window._zoom_toolbar = QWidget()
+    window._zoom_toolbar.setObjectName("ZoomToolbar")
     window._zoom_toolbar.setFixedHeight(28)
-    window._zoom_toolbar.setStyleSheet(
-        "background-color: rgb(40, 40, 40); border-top: 1px solid rgb(60, 60, 60);"
-    )
     zoom_layout = QHBoxLayout(window._zoom_toolbar)
     zoom_layout.setContentsMargins(6, 2, 6, 2)
     zoom_layout.setSpacing(4)
 
-    btn_style = """
-        QPushButton { background: rgb(60,60,60); color: white; border: 1px solid rgb(80,80,80); border-radius: 3px; padding: 1px 8px; font-size: 12px; }
-        QPushButton:hover { background: rgb(80,80,80); }
-        QPushButton:checked { background: rgb(60, 100, 180); border: 1px solid rgb(100, 160, 240); }
-    """
-
     window._snap_toggle_btn = QPushButton(tr("Snap"))
+    window._snap_toggle_btn.setObjectName("ToolbarButton")
     window._snap_toggle_btn.setCheckable(True)
     window._snap_toggle_btn.setChecked(True)
     window._snap_toggle_btn.setFixedWidth(50)
-    window._snap_toggle_btn.setStyleSheet(btn_style)
     window._snap_toggle_btn.setToolTip(tr("Toggle Magnetic Snap (S)"))
     window._snap_toggle_btn.clicked.connect(window._toggle_magnetic_snap)
 
     window._zoom_fit_btn = QPushButton(tr("Fit"))
+    window._zoom_fit_btn.setObjectName("ToolbarButton")
     window._zoom_fit_btn.setFixedWidth(36)
-    window._zoom_fit_btn.setStyleSheet(btn_style)
     window._zoom_fit_btn.setToolTip(tr("Fit entire timeline (Ctrl+0)"))
     window._zoom_fit_btn.clicked.connect(window._timeline.zoom_fit)
 
     window._ripple_toggle_btn = QPushButton("Ripple")
+    window._ripple_toggle_btn.setObjectName("ToolbarButton")
     window._ripple_toggle_btn.setCheckable(True)
     window._ripple_toggle_btn.setChecked(False)
     window._ripple_toggle_btn.setFixedWidth(50)
-    window._ripple_toggle_btn.setStyleSheet(btn_style)
     window._ripple_toggle_btn.setToolTip(tr("Toggle Ripple Edit Mode (R)"))
     window._ripple_toggle_btn.clicked.connect(window._toggle_ripple_mode)
 
     window._zoom_out_btn = QPushButton("-")
+    window._zoom_out_btn.setObjectName("ToolbarButton")
     window._zoom_out_btn.setFixedWidth(28)
-    window._zoom_out_btn.setStyleSheet(btn_style)
     window._zoom_out_btn.setToolTip(tr("Zoom out (Ctrl+-)"))
     window._zoom_out_btn.clicked.connect(window._timeline.zoom_out)
 
@@ -132,15 +124,13 @@ def build_main_window_ui(window, player, audio_output, tts_audio_output, wavefor
     window._zoom_slider.setToolTip(tr("Zoom Level"))
 
     window._zoom_label = QLabel("100%")
+    window._zoom_label.setObjectName("ZoomLabel")
     window._zoom_label.setFixedWidth(50)
     window._zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    window._zoom_label.setStyleSheet(
-        "color: rgb(180,180,180); font-size: 11px; border: none;"
-    )
 
     window._zoom_in_btn = QPushButton("+")
+    window._zoom_in_btn.setObjectName("ToolbarButton")
     window._zoom_in_btn.setFixedWidth(28)
-    window._zoom_in_btn.setStyleSheet(btn_style)
     window._zoom_in_btn.setToolTip(tr("Zoom in (Ctrl++)"))
     window._zoom_in_btn.clicked.connect(window._timeline.zoom_in)
 

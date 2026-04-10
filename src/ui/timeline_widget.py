@@ -571,26 +571,26 @@ class TimelineWidget(QWidget):
             dst_track = self._drag_mgr.dest_track_index
             dst_idx = self._drag_mgr.dest_insert_index
             if dst_track >= 0 and dst_idx >= 0 and self._project:
-                from PySide6.QtGui import QPainter, QPen, QColor
+                from PySide6.QtGui import QPainter, QPen
+                from src.ui.styles.theme import TimelineTheme
                 painter = QPainter(self)
                 y = self._video_track_y(dst_track)
-                
+
                 # Calculate X position for insertion marker
                 vt = self._project.video_tracks[dst_track]
                 target_ms = 0
                 for i in range(dst_idx):
                     if i < len(vt.clips):
                         target_ms += vt.clips[i].duration_ms
-                
-                x = self._ms_to_x(target_ms)
-                
-                painter.setPen(QPen(QColor(255, 255, 0), 3))
-                painter.drawLine(int(x), y, int(x), y + _CLIP_H)
-                
-                if self._drag_mgr.mode == DragMode.CLIP_DUPLICATE:
-                    painter.setPen(QPen(QColor(0, 255, 0), 3))  # Green for copy
-                    painter.drawLine(int(x), y, int(x), y + _CLIP_H)
 
+                x = self._ms_to_x(target_ms)
+
+                painter.setPen(QPen(TimelineTheme.INSERT_MARKER, 3))
+                painter.drawLine(int(x), y, int(x), y + _CLIP_H)
+
+                if self._drag_mgr.mode == DragMode.CLIP_DUPLICATE:
+                    painter.setPen(QPen(TimelineTheme.INSERT_MARKER_COPY, 3))  # Green for copy
+                    painter.drawLine(int(x), y, int(x), y + _CLIP_H)
                 painter.drawLine(int(x)-4, y, int(x)+4, y)
                 painter.drawLine(int(x)-4, y+_CLIP_H, int(x)+4, y+_CLIP_H)
                 painter.end()
