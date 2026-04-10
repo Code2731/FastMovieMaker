@@ -36,3 +36,7 @@ Desktop.ini
 
 # Local agent/editor state
 .claude/settings.json
+
+# Cython extensions
+*.so
+*.c
