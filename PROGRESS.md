@@ -2196,3 +2196,10 @@ H:\MyProject\FastMovieMaker\
 
 ### 2. 검증 및 결과
 - 전체 테스트 슈트(990 tests) 실행 성공, Cython으로 래핑된 상태에서도 정상 작동 확인.
+
+## 2026-04-10 (Day 54 - 문서화)
+
+**비디오 튜토리얼 제작 가이드 및 대본 작성**
+- `docs/VIDEO_TUTORIAL_SCRIPT.md` 생성.
+- 신규 사용자를 위한 3~5분 분량의 "Quick Start & Core Features" 비디오 튜토리얼 스토리보드 및 대본(Script) 작성 완료.
+- 영상 촬영 시 필요한 화면 연출 및 나레이션 가이드라인 제공.
