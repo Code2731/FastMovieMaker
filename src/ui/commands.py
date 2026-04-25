@@ -1397,6 +1397,23 @@ class RemoveAudioTrackCommand(QUndoCommand):
         self._project.bgm_tracks.insert(self._index, self._track)
 
 
+class WrapSubtitlesCommand(QUndoCommand):
+    """자막 자동 줄바꿈 일괄 적용."""
+
+    def __init__(self, track: "SubtitleTrack", changes: list[tuple[int, str, str]]):
+        super().__init__(tr("Wrap Subtitles"))
+        self._track = track
+        self._changes = changes  # [(index, old_text, new_text), ...]
+
+    def redo(self) -> None:
+        for idx, _, new in self._changes:
+            self._track.segments[idx].text = new
+
+    def undo(self) -> None:
+        for idx, old, _ in self._changes:
+            self._track.segments[idx].text = old
+
+
 class EditColorLabelCommand(QUndoCommand):
     """클립 컬러 레이블 변경."""
 
