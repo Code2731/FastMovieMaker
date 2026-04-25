@@ -26,6 +26,9 @@ Desktop.ini
 # Temp files
 *.wav
 *.tmp
+test_output.txt
+debug_*.py
+nul
 
 # PyTorch / Whisper cache
 *.pt
