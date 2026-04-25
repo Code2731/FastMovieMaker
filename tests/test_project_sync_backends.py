@@ -57,7 +57,7 @@ def test_git_backend_fetch_store_describe(tmp_path: Path) -> None:
 
     info = backend.describe("demo.fmm.json")
     assert info is not None
-    assert info.path.endswith(".fmm_sync_store/demo.fmm.json")
+    assert info.path.replace("\\", "/").endswith(".fmm_sync_store/demo.fmm.json")
     assert info.size_bytes == len(payload)
 
 
@@ -200,7 +200,8 @@ def test_git_backend_finalize_skips_when_sync_file_unchanged(tmp_path: Path, mon
 
     backend.finalize_remote_sync_if_needed("demo.fmm.json")
 
-    assert calls == [["status", "--porcelain", "--", ".fmm_sync_store/demo.fmm.json"]]
+    normalized_calls = [[a.replace("\\", "/") for a in c] for c in calls]
+    assert normalized_calls == [["status", "--porcelain", "--", ".fmm_sync_store/demo.fmm.json"]]
 
 
 def test_git_backend_finalize_push_failure_is_standardized(tmp_path: Path, monkeypatch) -> None:

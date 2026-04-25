@@ -121,6 +121,47 @@ class ClipController:
 
     # ---- 클립 삭제 ----
 
+    def on_delete_selected_clips(self) -> None:
+        """멀티 선택된 클립들을 일괄 삭제. 트랙이 비어지는 경우 해당 트랙은 건너뜀."""
+        ctx = self.ctx
+        selected: list[tuple[int, int]] = ctx.timeline.get_selected_clips()
+        if not selected:
+            return
+
+        # 트랙별로 그룹핑
+        by_track: dict[int, list[int]] = {}
+        for t_idx, c_idx in selected:
+            by_track.setdefault(t_idx, []).append(c_idx)
+
+        # 삭제 후 트랙이 비게 되는 경우 제외
+        deletable: list[tuple[int, int]] = []
+        for t_idx, clip_indices in by_track.items():
+            vt = ctx.project.video_tracks[t_idx]
+            if len(vt.clips) - len(clip_indices) <= 0:
+                continue
+            for c_idx in clip_indices:
+                deletable.append((t_idx, c_idx))
+
+        if not deletable:
+            return
+
+        ctx.undo_stack.beginMacro("Delete clips")
+        sub_track = ctx.project.subtitle_track
+        overlay_track = ctx.project.image_overlay_track
+        # 높은 인덱스부터 삭제해 앞 인덱스 밀림 방지
+        for t_idx, c_idx in sorted(deletable, key=lambda x: (x[0], -x[1])):
+            vt = ctx.project.video_tracks[t_idx]
+            clip = vt.clips[c_idx]
+            clip_start_tl = vt.clip_timeline_start(c_idx)
+            clip_end_tl = clip_start_tl + clip.duration_ms
+            cmd = DeleteClipCommand(
+                ctx.project, t_idx, c_idx, clip, sub_track, overlay_track,
+                clip_start_tl, clip_end_tl, ripple=ctx.timeline.is_ripple_mode()
+            )
+            ctx.undo_stack.push(cmd)
+        ctx.undo_stack.endMacro()
+        ctx.timeline._clear_selection()
+
     def on_delete_clip(self, track_index: int, clip_index: int) -> None:
         ctx = self.ctx
         if not ctx.project or track_index >= len(ctx.project.video_tracks):

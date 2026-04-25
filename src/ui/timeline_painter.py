@@ -122,6 +122,9 @@ class TimelinePainter:
         # 가시 범위 캐시 — 같은 뷰포트에서 _draw_audio_track/_draw_segments 중복 호출 방지
         self._visible_range_cache_key: tuple[int, int] | None = None
         self._visible_range_cache: tuple[int, int] = (0, 0)
+        # 소스 컬러 맵 캐시 — 클립 트랙이 변경될 때만 재계산
+        self._source_color_cache_key: object = None
+        self._source_color_cache: dict = {}
 
     # ================================================================
     # 메인 페인트 엔트리

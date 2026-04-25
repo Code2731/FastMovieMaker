@@ -43,7 +43,7 @@ def test_frozen_mode_uses_meipass():
         import src.utils.resource_path as _rp_module
         importlib.reload(_rp_module)
         result = _rp_module.get_resource_path("resources/icon.png")
-    assert str(result).startswith(fake_meipass)
+    assert str(result).startswith(str(Path(fake_meipass)))
     # 모듈 상태 복원
     import importlib
     import src.utils.resource_path as _rp_module2

@@ -1513,3 +1513,106 @@ class AutoAlignSubtitlesCommand(QUndoCommand):
         for i, (s, e) in enumerate(self._old):
             self._track[i].start_ms = s
             self._track[i].end_ms = e
+
+
+class EditColorCorrectionCommand(QUndoCommand):
+    """비디오 클립 색 보정(밝기/대비/채도/색조) 변경."""
+
+    def __init__(
+        self,
+        clip: "VideoClip",
+        old_brightness: float, old_contrast: float, old_saturation: float,
+        new_brightness: float, new_contrast: float, new_saturation: float,
+        old_hue: float = 0.0, new_hue: float = 0.0,
+    ):
+        super().__init__(tr("Edit Color Correction"))
+        self._clip = clip
+        self._old = (old_brightness, old_contrast, old_saturation, old_hue)
+        self._new = (new_brightness, new_contrast, new_saturation, new_hue)
+
+    def redo(self) -> None:
+        br, ct, sat, hue = self._new
+        self._clip.brightness = br
+        self._clip.contrast = ct
+        self._clip.saturation = sat
+        self._clip.hue = hue
+
+    def undo(self) -> None:
+        br, ct, sat, hue = self._old
+        self._clip.brightness = br
+        self._clip.contrast = ct
+        self._clip.saturation = sat
+        self._clip.hue = hue
+
+
+class AddMarkerCommand(QUndoCommand):
+    """타임라인 마커 추가."""
+
+    def __init__(self, project: "ProjectState", marker: object):
+        super().__init__(tr("Add Marker"))
+        self._project = project
+        self._marker = marker
+
+    def redo(self) -> None:
+        self._project.insert_marker(self._marker)
+
+    def undo(self) -> None:
+        try:
+            self._project.markers.remove(self._marker)
+        except ValueError:
+            pass
+
+
+class RemoveMarkerCommand(QUndoCommand):
+    """타임라인 마커 삭제."""
+
+    def __init__(self, project: "ProjectState", marker: object):
+        super().__init__(tr("Remove Marker"))
+        self._project = project
+        self._marker = marker
+
+    def redo(self) -> None:
+        try:
+            self._project.markers.remove(self._marker)
+        except ValueError:
+            pass
+
+    def undo(self) -> None:
+        self._project.insert_marker(self._marker)
+
+
+class RenameMarkerCommand(QUndoCommand):
+    """타임라인 마커 이름 변경."""
+
+    def __init__(self, marker: object, old_name: str, new_name: str):
+        super().__init__(tr("Rename Marker"))
+        self._marker = marker
+        self._old = old_name
+        self._new = new_name
+
+    def redo(self) -> None:
+        self._marker.name = self._new
+
+    def undo(self) -> None:
+        self._marker.name = self._old
+
+
+class ApplyTTSVerificationCommand(QUndoCommand):
+    """TTS 검증 결과(타이밍 보정)를 자막 트랙에 적용."""
+
+    def __init__(self, track: "SubtitleTrack", corrections: list) -> None:
+        super().__init__(tr("Apply TTS Verification"))
+        self._track = track
+        self._corrections = corrections
+
+    def redo(self) -> None:
+        for c in self._corrections:
+            seg = self._track.segments[c.seg_index]
+            seg.start_ms = c.new_start_ms
+            seg.end_ms = c.new_end_ms
+
+    def undo(self) -> None:
+        for c in self._corrections:
+            seg = self._track.segments[c.seg_index]
+            seg.start_ms = c.old_start_ms
+            seg.end_ms = c.old_end_ms
