@@ -19,3 +19,6 @@ markers = [
     "slow: marks tests as slow",
     "apv_smoke: marks APV sample-based smoke tests (requires FMM_APV_SAMPLE)",
 ]
+# MS Store Python(WindowsApps)은 심볼릭링크 resolve() 시 WinError 448이 발생해
+# pytest cleanup이 크래시됨. 임시 디렉토리를 보존하지 않으면 cleanup을 건너뜀.
+tmp_path_retention_policy = "none"

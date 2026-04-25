@@ -8,6 +8,25 @@ import sys
 
 import pytest
 
+# MS Store Python(WindowsApps) 샌드박스에서 심볼릭링크 resolve() 시 WinError 448 발생.
+# tmpdir.py가 cleanup_dead_symlinks를 직접 import하므로 두 모듈 모두 패치한다.
+try:
+    from _pytest import pathlib as _pytest_pathlib
+    from _pytest import tmpdir as _pytest_tmpdir
+
+    _orig_cleanup = _pytest_pathlib.cleanup_dead_symlinks
+
+    def _safe_cleanup_dead_symlinks(root):
+        try:
+            _orig_cleanup(root)
+        except OSError:
+            pass
+
+    _pytest_pathlib.cleanup_dead_symlinks = _safe_cleanup_dead_symlinks
+    _pytest_tmpdir.cleanup_dead_symlinks = _safe_cleanup_dead_symlinks
+except Exception:
+    pass
+
 # Keep Qt tests headless/stable on macOS CI and local CLI runs.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

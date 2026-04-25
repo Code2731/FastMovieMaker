@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import glob
 import tempfile
 import threading
 import time
@@ -16,6 +17,28 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+
+
+def _whisper_tiny_valid() -> bool:
+    """faster-whisper tiny 캐시 모델 파일이 존재하고 비어있지 않은지 확인."""
+    cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+    pattern = str(cache_dir / "models--Systran--faster-whisper-tiny" / "snapshots" / "*" / "model.bin")
+    files = glob.glob(pattern)
+    for f in files:
+        try:
+            if Path(f).stat().st_size > 1024:
+                return True
+        except OSError:
+            # MS Store Python 샌드박스에서 심볼릭링크 stat() 실패 → 손상으로 간주
+            pass
+    return False
+
+
+_WHISPER_TINY_VALID = _whisper_tiny_valid()
+_skip_no_model = pytest.mark.skipif(
+    not _WHISPER_TINY_VALID,
+    reason="faster-whisper tiny 모델 파일이 없거나 손상됨 (model.bin 0바이트 또는 미존재)",
+)
 
 
 class TestChunkLengthCompatibility:
@@ -40,6 +63,7 @@ class TestChunkLengthCompatibility:
         has_batch_size = "batch_size" in sig.parameters
         print(f"  WhisperModel.transcribe() has batch_size: {has_batch_size}")
 
+    @_skip_no_model
     def test_transcribe_with_real_model_and_silence(self) -> None:
         """실제 tiny 모델 + 3초 무음 WAV로 transcribe 호출 (chunk_length=10 포함)."""
         from faster_whisper import WhisperModel
@@ -79,6 +103,7 @@ class TestChunkLengthCompatibility:
 class TestCancelWithRealModel:
     """실제 모델로 취소가 동작하는지 검증."""
 
+    @_skip_no_model
     def test_cancel_stops_transcription(self) -> None:
         """취소 플래그 설정 시 세그먼트 루프가 즉시 중단되는지."""
         from faster_whisper import WhisperModel
