@@ -360,84 +360,83 @@ class MainWindow(QMainWindow):
 
     def _refresh_all_widgets(self) -> None:
         """Push current model state to all widgets."""
-        track = self._project.subtitle_track
+        project = self._ctx.project  # 항상 최신 project 사용 (on_load_project로 교체될 수 있음)
+        track = project.subtitle_track
         self._video_widget.set_subtitle_track(track if len(track) > 0 else None)
         self._subtitle_panel.set_track(track if len(track) > 0 else None)
         self._timeline.set_track(track if len(track) > 0 else None)
-        self._timeline.set_bgm_tracks(self._project.bgm_tracks)
+        self._timeline.set_bgm_tracks(project.bgm_tracks)
 
-        io_track = self._project.image_overlay_track
+        io_track = project.image_overlay_track
         self._timeline.set_image_overlay_track(io_track if len(io_track) > 0 else None)
         self._video_widget.set_image_overlay_track(io_track if len(io_track) > 0 else None)
 
-        text_track = self._project.text_overlay_track
+        text_track = project.text_overlay_track
         self._video_widget.set_text_overlay_track(text_track if len(text_track) > 0 else None)
         self._timeline.set_text_overlay_track(text_track if len(text_track) > 0 else None)
 
         v_idx = self._ctx.current_track_index
-        if 0 <= v_idx < len(self._project.video_tracks):
-            clip_track = self._project.video_tracks[v_idx]
+        if 0 <= v_idx < len(project.video_tracks):
+            clip_track = project.video_tracks[v_idx]
             self._timeline.set_clip_track(clip_track)
-            self._timeline.set_duration(self._project.duration_ms, has_video=self._project.has_video)
-            self._controls.set_output_duration(self._project.duration_ms)
+            self._timeline.set_duration(project.duration_ms, has_video=project.has_video)
+            self._controls.set_output_duration(project.duration_ms)
 
-        self._timeline.set_project(self._project)
+        self._timeline.set_project(project)
         self._autosave.notify_edit()
 
     def _ensure_timeline_duration(self) -> None:
         """Ensure the timeline has a non-zero duration even without a video."""
-        if self._project.has_video and self._project.duration_ms > 0:
+        project = self._ctx.project
+        if project.has_video and project.duration_ms > 0:
             return
         needed_ms = 0
-        for t in self._project.subtitle_tracks:
+        for t in project.subtitle_tracks:
             if t.audio_duration_ms > 0:
                 needed_ms = max(needed_ms, t.audio_duration_ms)
             if len(t) > 0:
                 needed_ms = max(needed_ms, t[-1].end_ms)
-        for ov in self._project.image_overlay_track:
+        for ov in project.image_overlay_track:
             needed_ms = max(needed_ms, ov.end_ms)
         if needed_ms > 0:
-            self._project.duration_ms = max(self._project.duration_ms, needed_ms)
-            self._timeline.set_duration(self._project.duration_ms)
+            project.duration_ms = max(project.duration_ms, needed_ms)
+            self._timeline.set_duration(project.duration_ms)
 
     def _refresh_track_selector(self) -> None:
-        names = [t.name or f"Track {i+1}" for i, t in enumerate(self._project.subtitle_tracks)]
-        self._track_selector.set_tracks(names, self._project.active_track_index)
+        project = self._ctx.project
+        names = [t.name or f"Track {i+1}" for i, t in enumerate(project.subtitle_tracks)]
+        self._track_selector.set_tracks(names, project.active_track_index)
 
     def _update_project_duration(self) -> None:
         """Calculate and update the total project duration based on all tracks."""
-        if not self._project:
+        project = self._ctx.project
+        if not project:
             return
-            
+
         max_ms = 0
-        
-        # 1. Video tracks
-        for vt in self._project.video_tracks:
+
+        for vt in project.video_tracks:
             max_ms = max(max_ms, vt.output_duration_ms)
-            
-        # 2. Subtitle tracks (text and TTS audio)
-        for st in self._project.subtitle_tracks:
+
+        for st in project.subtitle_tracks:
             if len(st) > 0:
                 max_ms = max(max_ms, st[-1].end_ms)
             if st.audio_duration_ms > 0:
                 max_ms = max(max_ms, st.audio_start_ms + st.audio_duration_ms)
-                
-        # 3. Image overlays
-        if self._project.image_overlay_track:
-            for ov in self._project.image_overlay_track:
+
+        if project.image_overlay_track:
+            for ov in project.image_overlay_track:
                 max_ms = max(max_ms, ov.end_ms)
-                
-        # 4. Text overlays
-        if self._project.text_overlay_track:
-            for ov in self._project.text_overlay_track.overlays:
+
+        if project.text_overlay_track:
+            for ov in project.text_overlay_track.overlays:
                 max_ms = max(max_ms, ov.end_ms)
-                
-        # 5. BGM tracks
-        for bt in self._project.bgm_tracks:
+
+        for bt in project.bgm_tracks:
             for clip in bt.clips:
                 max_ms = max(max_ms, clip.start_ms + clip.duration_ms)
-                
-        self._project.duration_ms = max_ms
+
+        project.duration_ms = max_ms
         self._timeline.set_duration(max_ms)
         self._controls.set_output_duration(max_ms)
         self._timeline.update()
