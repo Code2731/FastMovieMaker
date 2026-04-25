@@ -1459,3 +1459,57 @@ class EditTrackBlendModeCommand(QUndoCommand):
         self._track.chroma_color = cc
         self._track.chroma_similarity = cs
         self._track.chroma_blend = cb
+
+
+class EditSpeakerCommand(QUndoCommand):
+    """자막 세그먼트 화자(speaker) 변경."""
+
+    def __init__(self, track: "SubtitleTrack", index: int, old_speaker: "str | None", new_speaker: "str | None"):
+        super().__init__(tr("Edit Speaker"))
+        self._track = track
+        self._index = index
+        self._old = old_speaker
+        self._new = new_speaker
+
+    def redo(self) -> None:
+        self._track[self._index].speaker = self._new
+
+    def undo(self) -> None:
+        self._track[self._index].speaker = self._old
+
+
+class EditAnimationCommand(QUndoCommand):
+    """자막 세그먼트 애니메이션 변경."""
+
+    def __init__(self, track: "SubtitleTrack", index: int, old_anim: object, new_anim: object):
+        super().__init__(tr("Edit Animation"))
+        self._track = track
+        self._index = index
+        self._old = old_anim
+        self._new = new_anim
+
+    def redo(self) -> None:
+        self._track[self._index].animation = self._new
+
+    def undo(self) -> None:
+        self._track[self._index].animation = self._old
+
+
+class AutoAlignSubtitlesCommand(QUndoCommand):
+    """자막 자동 정렬 (겹침 제거)."""
+
+    def __init__(self, track: "SubtitleTrack", old_times: list[tuple[int, int]], new_times: list[tuple[int, int]]):
+        super().__init__(tr("Auto Align Subtitles"))
+        self._track = track
+        self._old = old_times
+        self._new = new_times
+
+    def redo(self) -> None:
+        for i, (s, e) in enumerate(self._new):
+            self._track[i].start_ms = s
+            self._track[i].end_ms = e
+
+    def undo(self) -> None:
+        for i, (s, e) in enumerate(self._old):
+            self._track[i].start_ms = s
+            self._track[i].end_ms = e
