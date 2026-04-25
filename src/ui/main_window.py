@@ -518,6 +518,54 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, tr("Screenshot Failed"), f"{tr('Failed to capture screenshot')}:\n{e}")
 
+    def _load_video(self, path) -> None:
+        from pathlib import Path
+        self._media.load_video(Path(path))
+
+    def show_welcome_dialog(self) -> None:
+        from src.ui.dialogs.welcome_dialog import WelcomeDialog
+        from src.services.template_manager import TemplateManager
+        recent = self._autosave.get_recent_files()
+        dialog = WelcomeDialog(recent_files=recent, parent=self)
+        result = dialog.exec()
+        if result == WelcomeDialog.RESULT_OPEN_FILE:
+            self._project_ctrl.on_load_project()
+        elif dialog.selected_recent():
+            self._project_ctrl.on_load_project(dialog.selected_recent())
+        elif dialog.selected_template():
+            TemplateManager.apply_to_project(dialog.selected_template(), self._ctx.project)
+
+    def _on_scene_detect(self) -> None:
+        from src.ui.dialogs.scene_detect_dialog import SceneDetectDialog
+        ctx = self._ctx
+        if not ctx.project.video_tracks or not ctx.project.video_tracks[0].clips:
+            self.statusBar().showMessage(tr("No video loaded"))
+            return
+        video_path = ctx.project.video_tracks[0].clips[0].source_path or ""
+        dialog = SceneDetectDialog(self, video_path)
+        dialog.exec()
+
+    def _on_verify_tts_timing(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(self, tr("Verify TTS Timing"), tr("TTS timing verification is not yet implemented."))
+
+    def _on_batch_tts(self) -> None:
+        from src.ui.dialogs.batch_tts_dialog import BatchTtsDialog
+        dialog = BatchTtsDialog(parent=self)
+        dialog.exec()
+
+    def _on_new_from_template(self) -> None:
+        from src.ui.dialogs.welcome_dialog import TemplatePickerDialog
+        from src.services.template_manager import TemplateManager
+        dialog = TemplatePickerDialog(parent=self)
+        if dialog.exec():
+            template = dialog.selected_template()
+            if template:
+                TemplateManager.apply_to_project(template, self._ctx.project)
+                self._ctx.timeline.update()
+                self._ctx.subtitle_panel.refresh()
+                self.statusBar().showMessage(f"{tr('Template applied')}: {template.display_name}")
+
     def _on_about(self) -> None:
         QMessageBox.about(
             self,
