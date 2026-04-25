@@ -1395,3 +1395,50 @@ class RemoveAudioTrackCommand(QUndoCommand):
 
     def undo(self) -> None:
         self._project.bgm_tracks.insert(self._index, self._track)
+
+
+class EditColorLabelCommand(QUndoCommand):
+    """클립 컬러 레이블 변경."""
+
+    def __init__(self, clip: "VideoClip", old_label: str, new_label: str):
+        super().__init__(tr("Edit Color Label"))
+        self._clip = clip
+        self._old = old_label
+        self._new = new_label
+
+    def redo(self) -> None:
+        self._clip.color_label = self._new
+
+    def undo(self) -> None:
+        self._clip.color_label = self._old
+
+
+class EditTrackBlendModeCommand(QUndoCommand):
+    """비디오 트랙 블렌드 모드 및 크로마키 설정 변경."""
+
+    def __init__(
+        self,
+        track: "VideoClipTrack",
+        blend_mode: str,
+        chroma_color: str,
+        chroma_similarity: float,
+        chroma_blend: float,
+    ):
+        super().__init__(tr("Edit Track Blend Mode"))
+        self._track = track
+        self._new = (blend_mode, chroma_color, chroma_similarity, chroma_blend)
+        self._old = (track.blend_mode, track.chroma_color, track.chroma_similarity, track.chroma_blend)
+
+    def redo(self) -> None:
+        bm, cc, cs, cb = self._new
+        self._track.blend_mode = bm
+        self._track.chroma_color = cc
+        self._track.chroma_similarity = cs
+        self._track.chroma_blend = cb
+
+    def undo(self) -> None:
+        bm, cc, cs, cb = self._old
+        self._track.blend_mode = bm
+        self._track.chroma_color = cc
+        self._track.chroma_similarity = cs
+        self._track.chroma_blend = cb
