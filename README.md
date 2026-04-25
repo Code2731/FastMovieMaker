@@ -231,7 +231,21 @@ src/
 
 ---
 
-## 🚀 설치 방법
+## 📥 다운로드 (배포 버전)
+
+> 소스 빌드 없이 바로 사용하려면 아래 릴리즈 페이지에서 최신 버전을 받으세요.
+
+[![GitHub Releases](https://img.shields.io/github/v/release/Code2731/FastMovieMaker?label=최신%20버전&style=for-the-badge)](https://github.com/Code2731/FastMovieMaker/releases/latest)
+
+| 플랫폼 | 파일 | 비고 |
+|--------|------|------|
+| **Windows 10/11 (64-bit)** | `FastMovieMaker-windows-x64.zip` | FFmpeg 포함 |
+
+👉 **[전체 릴리즈 목록 보기](https://github.com/Code2731/FastMovieMaker/releases)**
+
+---
+
+## 🚀 설치 방법 (소스 빌드)
 
 ### 요구 사항
 - **Python 3.13+** (3.9+ 지원)
@@ -241,7 +255,7 @@ src/
 ### 설정
 ```bash
 # 저장소 복제
-git clone https://github.com/yourusername/FastMovieMaker.git
+git clone https://github.com/Code2731/FastMovieMaker.git
 cd FastMovieMaker
 
 # 가상환경 생성
@@ -415,8 +429,8 @@ ruff check src/ tests/
 
 ## 💬 연락처
 
-- **이슈:** [GitHub Issues](https://github.com/yourusername/FastMovieMaker/issues)
-- **토론:** [GitHub Discussions](https://github.com/yourusername/FastMovieMaker/discussions)
+- **이슈:** [GitHub Issues](https://github.com/Code2731/FastMovieMaker/issues)
+- **토론:** [GitHub Discussions](https://github.com/Code2731/FastMovieMaker/discussions)
 
 ---
 
