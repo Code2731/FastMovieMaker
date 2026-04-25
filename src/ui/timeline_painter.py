@@ -119,6 +119,9 @@ class TimelinePainter:
         # 웨이브폼 이미지 캐시
         self._waveform_image_cache: QImage | None = None
         self._waveform_cache_key: tuple | None = None
+        # 가시 범위 캐시 — 같은 뷰포트에서 _draw_audio_track/_draw_segments 중복 호출 방지
+        self._visible_range_cache_key: tuple[int, int] | None = None
+        self._visible_range_cache: tuple[int, int] = (0, 0)
 
     # ================================================================
     # 메인 페인트 엔트리
@@ -410,6 +413,27 @@ class TimelinePainter:
 
     # ---- Audio / Subtitle ----
 
+    def _get_visible_range(self) -> tuple[int, int]:
+        """가시 범위 인덱스를 반환하되, 같은 뷰포트에서 재호출 시 캐시를 재사용한다."""
+        tw = self.tw
+        start_ms = tw._visible_start_ms
+        end_ms = start_ms + tw._visible_range_ms()
+        cache_key = (start_ms, end_ms)
+        if self._visible_range_cache_key != cache_key:
+            self._visible_range_cache = tw._track.visible_range_indices(start_ms, end_ms)
+            self._visible_range_cache_key = cache_key
+        return self._visible_range_cache
+
+    def _build_static_cache_key(self, width: int, height: int, visible_ms: int) -> tuple:
+        """정적 렌더링 캐시 키 — 세그먼트 텍스트/스타일/선택/뷰포트 변화 시 달라진다."""
+        tw = self.tw
+        lo, hi = self._get_visible_range()
+        seg_hashes = tuple(
+            (tw._track[i].text, id(tw._track[i].style) if hasattr(tw._track[i], "style") else None)
+            for i in range(lo, hi)
+        )
+        return (width, height, visible_ms, tw._visible_start_ms, tw._selected_index, seg_hashes)
+
     def _draw_audio_track(self, painter: QPainter, h: int) -> None:
         """세그먼트별 TTS 오디오 구간."""
         tw = self.tw
@@ -418,7 +442,9 @@ class TimelinePainter:
         y = tw._audio_track_y()
         track_h = _AUDIO_H
         is_locked = tw._track.locked
-        for i, seg in enumerate(tw._track):
+        lo, hi = self._get_visible_range()
+        for i in range(lo, hi):
+            seg = tw._track[i]
             if not seg.audio_file:
                 continue
             x1 = tw._ms_to_x(seg.start_ms)
@@ -449,7 +475,9 @@ class TimelinePainter:
         sel_border = self._SELECTED_BORDER
         sel_glow = self._SELECTED_GLOW
         is_locked = tw._track.locked
-        for i, seg in enumerate(tw._track):
+        lo, hi = self._get_visible_range()
+        for i in range(lo, hi):
+            seg = tw._track[i]
             x1 = ms_to_x(seg.start_ms)
             x2 = ms_to_x(seg.end_ms)
             if x2 < 0 or x1 > widget_w:

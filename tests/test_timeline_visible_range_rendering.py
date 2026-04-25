@@ -23,6 +23,7 @@ class _TrackSpy:
         self.visible_args: tuple[int, int] | None = None
         self.visible_call_count: int = 0
         self.hidden: bool = False
+        self.locked: bool = False
 
     def __bool__(self) -> bool:
         return True
