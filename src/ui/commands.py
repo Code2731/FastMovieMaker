@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from src.models.project import ProjectState
     from src.models.style import SubtitleStyle
     from src.models.subtitle import SubtitleSegment, SubtitleTrack
-    from src.models.timeline_marker import TimelineMarker
     from src.models.video_clip import VideoClip, VideoClipTrack
     from src.models.video_clip import VideoClipTrack  # Runtime import for AddVideoTrackCommand
     from src.models.image_overlay import ImageOverlay, ImageOverlayTrack
@@ -130,26 +129,6 @@ class EditStyleCommand(QUndoCommand):
     def undo(self) -> None:
         if 0 <= self._index < len(self._track):
             self._track[self._index].style = self._old_style
-
-
-class EditAnimationCommand(QUndoCommand):
-    """Change the animation of a subtitle segment."""
-
-    def __init__(self, track: SubtitleTrack, index: int,
-                 old_anim, new_anim):
-        super().__init__(tr("Edit animation"))
-        self._track = track
-        self._index = index
-        self._old = old_anim
-        self._new = new_anim
-
-    def redo(self) -> None:
-        if 0 <= self._index < len(self._track):
-            self._track[self._index].animation = self._new
-
-    def undo(self) -> None:
-        if 0 <= self._index < len(self._track):
-            self._track[self._index].animation = self._old
 
 
 class SplitCommand(QUndoCommand):
@@ -965,6 +944,22 @@ class RemoveVideoTrackCommand(QUndoCommand):
         self._project.video_tracks.insert(self._index, self._track)
 
 
+class RenameVideoTrackCommand(QUndoCommand):
+    """Rename a video track."""
+
+    def __init__(self, track: VideoClipTrack, old_name: str, new_name: str):
+        super().__init__(tr("Rename Video Track"))
+        self._track = track
+        self._old_name = old_name
+        self._new_name = new_name
+
+    def redo(self) -> None:
+        self._track.name = self._new_name
+
+    def undo(self) -> None:
+        self._track.name = self._old_name
+
+
 class MoveVideoClipCommand(QUndoCommand):
     """Move a video clip from one track/position to another."""
 
@@ -1353,196 +1348,50 @@ class DeleteAudioClipCommand(QUndoCommand):
             track.clips.sort(key=lambda c: c.start_ms)
 
 
-class AutoAlignSubtitlesCommand(QUndoCommand):
-    """겹치는 자막 자동 정렬."""
+class RenameAudioTrackCommand(QUndoCommand):
+    """Rename a BGM track."""
 
-    def __init__(
-        self,
-        track: SubtitleTrack,
-        old_times: list[tuple[int, int]],
-        new_times: list[tuple[int, int]],
-    ):
-        super().__init__(tr("Auto-align subtitles"))
+    def __init__(self, track: AudioTrack, old_name: str, new_name: str):
+        super().__init__(tr("Rename BGM Track"))
         self._track = track
-        self._old_times = old_times
-        self._new_times = new_times
+        self._old_name = old_name
+        self._new_name = new_name
 
     def redo(self) -> None:
-        self._apply(self._new_times)
+        self._track.name = self._new_name
 
     def undo(self) -> None:
-        self._apply(self._old_times)
-
-    def _apply(self, times: list[tuple[int, int]]) -> None:
-        for i, (s, e) in enumerate(times):
-            self._track.segments[i].start_ms = s
-            self._track.segments[i].end_ms = e
+        self._track.name = self._old_name
 
 
-class WrapSubtitlesCommand(QUndoCommand):
-    """자막 텍스트 자동 줄바꿈."""
+class AddAudioTrackCommand(QUndoCommand):
+    """Add a new BGM track."""
 
-    def __init__(self, track: SubtitleTrack, changes: list[tuple[int, str, str]]):
-        super().__init__(tr("Auto-wrap subtitles"))
-        self._track = track
-        self._changes = changes  # [(index, old_text, new_text), ...]
-
-    def redo(self) -> None:
-        for i, _, new in self._changes:
-            self._track.update_segment_text(i, new)
-
-    def undo(self) -> None:
-        for i, old, _ in self._changes:
-            self._track.update_segment_text(i, old)
-
-
-class EditColorLabelCommand(QUndoCommand):
-    """클립 컬러 레이블 설정."""
-
-    def __init__(self, clip: VideoClip, old_label: str, new_label: str):
-        super().__init__(tr("Set color label"))
-        self._clip = clip
-        self._old = old_label
-        self._new = new_label
-
-    def redo(self) -> None:
-        self._clip.color_label = self._new
-
-    def undo(self) -> None:
-        self._clip.color_label = self._old
-
-
-class EditColorCorrectionCommand(QUndoCommand):
-    """클립 컬러 보정 (brightness/contrast/saturation/hue) 전용 커맨드."""
-
-    def __init__(self, clip: VideoClip,
-                 old_br: float, old_ct: float, old_sat: float,
-                 new_br: float, new_ct: float, new_sat: float,
-                 old_hue: float = 0.0, new_hue: float = 0.0):
-        super().__init__(tr("Edit color correction"))
-        self._clip = clip
-        self._old = (old_br, old_ct, old_sat, old_hue)
-        self._new = (new_br, new_ct, new_sat, new_hue)
-
-    def redo(self) -> None:
-        self._clip.brightness, self._clip.contrast, self._clip.saturation, self._clip.hue = self._new
-
-    def undo(self) -> None:
-        self._clip.brightness, self._clip.contrast, self._clip.saturation, self._clip.hue = self._old
-
-
-class AddMarkerCommand(QUndoCommand):
-    """타임라인 마커 추가."""
-
-    def __init__(self, project: ProjectState, marker: TimelineMarker):
-        super().__init__(tr("Add marker"))
+    def __init__(self, project: ProjectState):
+        super().__init__(tr("Add BGM Track"))
         self._project = project
-        self._marker = marker
+        self._track = AudioTrack()
 
     def redo(self) -> None:
-        self._project.insert_marker(self._marker)
+        self._project.bgm_tracks.append(self._track)
 
     def undo(self) -> None:
-        self._project.markers.remove(self._marker)
+        if self._project.bgm_tracks:
+            self._project.bgm_tracks.pop()
 
 
-class RemoveMarkerCommand(QUndoCommand):
-    """타임라인 마커 삭제."""
+class RemoveAudioTrackCommand(QUndoCommand):
+    """Remove a BGM track."""
 
-    def __init__(self, project: ProjectState, marker: TimelineMarker):
-        super().__init__(tr("Remove marker"))
+    def __init__(self, project: ProjectState, index: int):
+        super().__init__(tr("Remove BGM Track"))
         self._project = project
-        self._marker = marker
-
-    def redo(self) -> None:
-        self._project.markers.remove(self._marker)
-
-    def undo(self) -> None:
-        self._project.insert_marker(self._marker)
-
-
-class RenameMarkerCommand(QUndoCommand):
-    """타임라인 마커 이름 변경."""
-
-    def __init__(self, marker: TimelineMarker, old_name: str, new_name: str):
-        super().__init__(tr("Rename marker"))
-        self._marker = marker
-        self._old = old_name
-        self._new = new_name
-
-    def redo(self) -> None:
-        self._marker.name = self._new
-
-    def undo(self) -> None:
-        self._marker.name = self._old
-
-
-class EditTrackBlendModeCommand(QUndoCommand):
-    """비디오 트랙의 블렌드 모드 및 크로마키 설정을 변경한다."""
-
-    def __init__(self, track: VideoClipTrack,
-                 new_blend_mode: str, new_chroma_color: str,
-                 new_chroma_similarity: float, new_chroma_blend: float) -> None:
-        super().__init__(tr("Edit Track Blend Mode"))
-        self._track = track
-        self._old = (track.blend_mode, track.chroma_color,
-                     track.chroma_similarity, track.chroma_blend)
-        self._new = (new_blend_mode, new_chroma_color,
-                     new_chroma_similarity, new_chroma_blend)
-
-    def redo(self) -> None:
-        bm, cc, cs, cb = self._new
-        self._track.blend_mode = bm
-        self._track.chroma_color = cc
-        self._track.chroma_similarity = cs
-        self._track.chroma_blend = cb
-
-    def undo(self) -> None:
-        bm, cc, cs, cb = self._old
-        self._track.blend_mode = bm
-        self._track.chroma_color = cc
-        self._track.chroma_similarity = cs
-        self._track.chroma_blend = cb
-
-
-class ApplyTTSVerificationCommand(QUndoCommand):
-    """Whisper 역방향 검증 결과를 자막 트랙에 적용한다."""
-
-    def __init__(self, track: SubtitleTrack, corrections: list) -> None:
-        """
-        Args:
-            track:       보정 대상 자막 트랙.
-            corrections: list[CorrectionResult] — 보정 목록.
-        """
-        super().__init__(tr("Apply TTS verification"))
-        self._track = track
-        self._corrections = list(corrections)
-
-    def redo(self) -> None:
-        for c in self._corrections:
-            if 0 <= c.seg_index < len(self._track.segments):
-                self._track.update_segment_time(c.seg_index, c.new_start_ms, c.new_end_ms)
-
-    def undo(self) -> None:
-        for c in self._corrections:
-            if 0 <= c.seg_index < len(self._track.segments):
-                self._track.update_segment_time(c.seg_index, c.old_start_ms, c.old_end_ms)
-
-
-class EditSpeakerCommand(QUndoCommand):
-    """Change the speaker ID of a subtitle segment."""
-
-    def __init__(self, track: SubtitleTrack, index: int, old_speaker: str | None, new_speaker: str | None):
-        super().__init__(f"Edit speaker (segment {index + 1})")
-        self._track = track
         self._index = index
-        self._old_speaker = old_speaker
-        self._new_speaker = new_speaker
+        self._track = project.bgm_tracks[index]
 
     def redo(self) -> None:
-        if 0 <= self._index < len(self._track):
-            self._track[self._index].speaker = self._new_speaker
+        if 0 <= self._index < len(self._project.bgm_tracks):
+            self._project.bgm_tracks.pop(self._index)
 
     def undo(self) -> None:
-        if 0 <= self._index < len(self._track):
-            self._track[self._index].speaker = self._old_speaker
+        self._project.bgm_tracks.insert(self._index, self._track)

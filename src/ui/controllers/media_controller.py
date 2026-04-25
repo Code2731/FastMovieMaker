@@ -574,11 +574,49 @@ class MediaController(QObject):
         if not (0 <= clip_idx < len(track.clips)):
             return
         from src.ui.commands import DeleteAudioClipCommand
-        cmd = DeleteAudioClipCommand(ctx.project, track_idx, clip_idx)
+        cmd = DeleteAudioClipCommand(ctx.project, track_idx, clip_idx, track.clips[clip_idx])
         ctx.undo_stack.push(cmd)
         ctx.project_ctrl.on_document_edited()
         ctx.refresh_all()
         ctx.status_bar().showMessage(tr("BGM clip deleted"))
+
+    def on_add_bgm_track(self) -> None:
+        """Add a new BGM track."""
+        from src.ui.commands import AddAudioTrackCommand
+        cmd = AddAudioTrackCommand(self.ctx.project)
+        self.ctx.undo_stack.push(cmd)
+        self.ctx.refresh_all()
+
+    def on_remove_bgm_track(self, index: int) -> None:
+        """Remove a BGM track."""
+        if len(self.ctx.project.bgm_tracks) <= 1:
+            return
+        from src.ui.commands import RemoveAudioTrackCommand
+        cmd = RemoveAudioTrackCommand(self.ctx.project, index)
+        self.ctx.undo_stack.push(cmd)
+        self.ctx.refresh_all()
+
+    def on_rename_bgm_track(self, index: int) -> None:
+        """Rename a BGM track."""
+        if not self.ctx.project or index < 0 or index >= len(self.ctx.project.bgm_tracks):
+            return
+            
+        track = self.ctx.project.bgm_tracks[index]
+        current_name = track.name or f"BGM {index + 1}"
+        
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(
+            self.ctx.window, tr("Rename BGM Track"), 
+            tr("New name:"), text=current_name
+        )
+        
+        if ok and name.strip():
+            from src.ui.commands import RenameAudioTrackCommand
+            cmd = RenameAudioTrackCommand(track, track.name, name.strip())
+            self.ctx.undo_stack.push(cmd)
+            self.ctx.refresh_all()
+            if self.ctx.track_header:
+                self.ctx.track_header.update()
 
     def _get_audio_duration_ms(self, path: Path) -> int:
         try:

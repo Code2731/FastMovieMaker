@@ -78,7 +78,12 @@
       "Bash(git -C /Users/namhyunjun/MyProject/FastMovieMaker diff)",
       "Bash(git -C /Users/namhyunjun/MyProject/FastMovieMaker log --oneline -5)",
       "Bash(git -C /Users/namhyunjun/MyProject/FastMovieMaker add src/ui/main_window.py src/ui/timeline_widget.py test_after_tts.py test_playhead_during_playback.py test_real_scenario.py test_timeline_click.py)",
-      "Bash(git -C /Users/namhyunjun/MyProject/FastMovieMaker commit -m \"$\\(cat <<''EOF''\nFix TTS playhead drag: seek now works correctly without video\n\n- Fix _on_timeline_seek to directly seek TTS player when no video loaded\n  \\(was using _player.position\\(\\)=0, resetting TTS to 0ms on every seek\\)\n- Fix _seek_to_x to update playhead position immediately so it follows\n  mouse drag visually\n- Remove temporary test scripts\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C /Users/namhyunjun/MyProject/FastMovieMaker commit -m \"$\\(cat <<''EOF''\nFix TTS playhead drag: seek now works correctly without video\n\n- Fix _on_timeline_seek to directly seek TTS player when no video loaded\n  \\(was using _player.position\\(\\)=0, resetting TTS to 0ms on every seek\\)\n- Fix _seek_to_x to update playhead position immediately so it follows\n  mouse drag visually\n- Remove temporary test scripts\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git rm:*)",
+      "Bash(git remote *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)"
     ]
   }
 }

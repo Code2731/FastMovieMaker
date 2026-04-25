@@ -95,6 +95,7 @@ class AppContext:
         # ---- MainWindow 콜백 (Controller에서 호출) ----
         self.refresh_all: Callable[[], None] = lambda: None
         self.ensure_timeline_duration: Callable[[], None] = lambda: None
+        self.update_project_duration: Callable[[], None] = lambda: None
         self.refresh_track_selector: Callable[[], None] = lambda: None
 
     def status_bar(self) -> QStatusBar:

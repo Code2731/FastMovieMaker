@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
 
 from src.models.project import ProjectState
 from src.services.autosave import AutoSaveManager
-from src.services.auto_sync_manager import AutoSyncManager
 from src.ui.controllers.app_context import AppContext
 from src.ui.controllers.clip_controller import ClipController
 from src.services.frame_cache_service import FrameCacheService
@@ -32,7 +31,6 @@ from src.ui.controllers.subtitle_controller import SubtitleController
 from src.ui.dialogs.preferences_dialog import PreferencesDialog
 from src.utils.config import APP_NAME, APP_VERSION, find_ffmpeg
 from src.utils.i18n import tr
-from src.utils.resource_path import get_resource_path
 
 
 class MainWindow(QMainWindow):
@@ -46,7 +44,7 @@ class MainWindow(QMainWindow):
         self.resize(1440, 950)
 
         # App icon
-        icon_path = get_resource_path("resources/icon.png")
+        icon_path = Path(__file__).resolve().parent.parent.parent / "resources" / "icon.png"
         if icon_path.is_file():
             self.setWindowIcon(QIcon(str(icon_path)))
 
@@ -57,7 +55,6 @@ class MainWindow(QMainWindow):
         self._project = ProjectState()
         self._autosave = AutoSaveManager(self)
         self._autosave.set_project(self._project)
-        self._auto_sync = AutoSyncManager(self)
         self._undo_stack = QUndoStack(self)
 
         # ---- Media players ----
@@ -108,14 +105,14 @@ class MainWindow(QMainWindow):
         ctx.templates_panel = self._templates_panel
         ctx.track_header = self._track_headers
         ctx.autosave = self._autosave
-        ctx.auto_sync = self._auto_sync
         ctx.pending_seek_timer = self._pending_seek_timer
         ctx.render_pause_timer = self._render_pause_timer
         ctx.frame_cache = self._frame_cache
         ctx.frame_player = self._frame_player
         # MainWindow 콜백 등록
         ctx.refresh_all = self._refresh_all_widgets
-        ctx.ensure_timeline_duration = self._ensure_timeline_duration
+        ctx.ensure_timeline_duration = self._update_project_duration
+        ctx.update_project_duration = self._update_project_duration
         ctx.refresh_track_selector = self._refresh_track_selector
         self._ctx = ctx
 
@@ -138,7 +135,6 @@ class MainWindow(QMainWindow):
         self._pending_seek_timer.timeout.connect(self._playback.on_pending_seek_timeout)
         self._render_pause_timer.timeout.connect(self._playback.on_render_pause)
         self._autosave.save_completed.connect(self._project_ctrl.on_autosave_completed)
-        self._auto_sync.sync_message.connect(self._on_auto_sync_message)
         self._undo_stack.indexChanged.connect(lambda _: self._project_ctrl.on_document_edited())
 
         # ---- Recovery check (UI 필요) ----
@@ -181,54 +177,47 @@ class MainWindow(QMainWindow):
     # ---------------------------------------------------------------- Shortcuts
 
     def _setup_shortcuts(self) -> None:
-        from src.services.settings_manager import SettingsManager
-        sm = SettingsManager()
+        sc_space = QShortcut(QKeySequence(Qt.Key.Key_Space), self)
+        sc_space.activated.connect(self._playback.toggle_play_pause)
 
-        self._shortcuts: dict[str, QShortcut] = {}
+        sc_left = QShortcut(QKeySequence(Qt.Key.Key_Left), self)
+        sc_left.activated.connect(lambda: self._playback.seek_relative(-5000))
+        sc_right = QShortcut(QKeySequence(Qt.Key.Key_Right), self)
+        sc_right.activated.connect(lambda: self._playback.seek_relative(5000))
 
-        def _make(action: str, slot) -> QShortcut:
-            key = sm.get_shortcut(action)
-            sc = QShortcut(QKeySequence(key), self)
-            sc.activated.connect(slot)
-            self._shortcuts[action] = sc
-            return sc
+        sc_frame_left = QShortcut(QKeySequence("Shift+Left"), self)
+        sc_frame_left.activated.connect(lambda: self._playback.seek_frame_relative(-1))
+        sc_frame_right = QShortcut(QKeySequence("Shift+Right"), self)
+        sc_frame_right.activated.connect(lambda: self._playback.seek_frame_relative(1))
 
-        _make("play_pause", self._playback.toggle_play_pause)
-        _make("seek_back", lambda: self._playback.seek_relative(-5000))
-        _make("seek_forward", lambda: self._playback.seek_relative(5000))
-        _make("seek_back_frame", lambda: self._playback.seek_frame_relative(-1))
-        _make("seek_forward_frame", lambda: self._playback.seek_frame_relative(1))
-        _make("delete", self._on_delete_pressed)
-        _make("copy_clip", self._on_copy)
-        _make("paste_clip", self._on_paste)
-        _make("split_clip", lambda: self._clip.on_split_clip(-1, self._timeline._playhead_ms))
-        _make("zoom_in", self._timeline.zoom_in)
-        _make("zoom_out", self._timeline.zoom_out)
-        _make("zoom_fit", self._timeline.zoom_fit)
-        _make("snap_toggle", self._toggle_magnetic_snap)
+        sc_del = QShortcut(QKeySequence(Qt.Key.Key_Delete), self)
+        sc_del.activated.connect(self._on_delete_pressed)
 
-        # Ctrl++ 보조 단축키 (커스터마이징 불가)
+        sc_copy = QShortcut(QKeySequence.Copy, self)
+        sc_copy.activated.connect(self._on_copy)
+
+        sc_paste = QShortcut(QKeySequence.Paste, self)
+        sc_paste.activated.connect(self._on_paste)
+
+        sc_split = QShortcut(QKeySequence("Ctrl+B"), self)
+        sc_split.activated.connect(lambda: self._clip.on_split_clip(-1, self._timeline._playhead_ms))
+
+        sc_zoom_in = QShortcut(QKeySequence("Ctrl+="), self)
+        sc_zoom_in.activated.connect(self._timeline.zoom_in)
         sc_zoom_in2 = QShortcut(QKeySequence("Ctrl++"), self)
         sc_zoom_in2.activated.connect(self._timeline.zoom_in)
+        sc_zoom_out = QShortcut(QKeySequence("Ctrl+-"), self)
+        sc_zoom_out.activated.connect(self._timeline.zoom_out)
+        sc_zoom_fit = QShortcut(QKeySequence("Ctrl+0"), self)
+        sc_zoom_fit.activated.connect(self._timeline.zoom_fit)
 
-    def apply_shortcuts(self) -> None:
-        """저장된 단축키 설정을 즉시 적용한다 (앱 재시작 불필요)."""
-        from src.services.settings_manager import SettingsManager
-        sm = SettingsManager()
-        for action, sc in self._shortcuts.items():
-            key = sm.get_shortcut(action)
-            if key:
-                sc.setKey(QKeySequence(key))
+        sc_snap = QShortcut(QKeySequence(Qt.Key.Key_S), self)
+        sc_snap.activated.connect(self._toggle_magnetic_snap)
 
     def _on_delete_pressed(self) -> None:
         """Handle delete key press: delete selected item from timeline or subtitle panel."""
-        # 멀티 클립 선택 시 일괄 삭제
-        if len(self._timeline.get_selected_clips()) > 1:
-            self._clip.on_delete_selected_clips()
-            return
-
         item_type, track_idx, item_idx = self._timeline.get_selected_item()
-
+        
         if item_type == "clip":
             self._clip.on_delete_clip(track_idx, item_idx)
         elif item_type == "image":
@@ -281,17 +270,11 @@ class MainWindow(QMainWindow):
         # Subtitle editing → SubtitleController
         self._subtitle_panel.text_edited.connect(self._subtitle_ctrl.on_text_edited)
         self._subtitle_panel.time_edited.connect(self._subtitle_ctrl.on_time_edited)
-        self._subtitle_panel.volume_edited.connect(self._subtitle_ctrl.on_segment_volume_edited)
-        self._subtitle_panel.speaker_edited.connect(self._subtitle_ctrl.on_speaker_edited)
-
+        self._subtitle_panel.segment_add_requested.connect(self._subtitle_ctrl.on_segment_add)
         self._subtitle_panel.segment_delete_requested.connect(self._subtitle_ctrl.on_segment_delete)
         self._subtitle_panel.style_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_style)
         self._subtitle_panel.volume_edited.connect(self._subtitle_ctrl.on_segment_volume_edited)
         self._subtitle_panel.tts_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_tts)
-        self._subtitle_panel.animation_edit_requested.connect(self._subtitle_ctrl.on_edit_segment_animation)
-        self._subtitle_panel.bulk_animation_requested.connect(self._subtitle_ctrl.on_bulk_edit_animation)
-        self._subtitle_panel.bulk_style_requested.connect(self._subtitle_ctrl.on_bulk_edit_style)
-        self._subtitle_panel.font_changed.connect(self._subtitle_ctrl.on_font_changed)
 
         # Timeline subtitle
         self._timeline.segment_selected.connect(self._subtitle_ctrl.on_timeline_segment_selected)
@@ -319,22 +302,14 @@ class MainWindow(QMainWindow):
         self._timeline.clip_speed_requested.connect(self._clip.on_edit_clip_speed)
         self._timeline.clip_moved.connect(self._clip.on_clip_moved)
         self._timeline.transition_requested.connect(self._clip.on_transition_requested)
-        self._timeline.transition_remove_requested.connect(self._clip.on_remove_transition)
         self._timeline.clip_volume_requested.connect(self._clip.on_edit_clip_properties)
-        self._timeline.clip_color_requested.connect(self._clip.on_edit_clip_color)
-        self._timeline.clip_bulk_color_requested.connect(self._clip.on_bulk_edit_color)
-        self._timeline.clip_color_label_requested.connect(self._clip.on_set_color_label)
         self._timeline.clip_double_clicked.connect(self._clip.on_edit_clip_properties)
-        self._timeline.clips_delete_requested.connect(self._clip.on_delete_selected_clips)
-        self._timeline.clip_copy_requested.connect(self._clip.copy_selected_clip)
-        self._timeline.clip_paste_requested.connect(self._clip.paste_clip)
-        self._timeline.add_marker_requested.connect(self._on_add_marker)
-        self._timeline.remove_marker_requested.connect(self._on_remove_marker)
-        self._timeline.rename_marker_requested.connect(self._on_rename_marker)
         self._track_headers.track_add_requested.connect(self._clip.on_add_video_track)
         self._track_headers.track_remove_requested.connect(self._clip.on_remove_video_track)
         self._track_headers.track_rename_requested.connect(self._clip.on_rename_video_track)
-        self._track_headers.track_settings_requested.connect(self._clip.on_track_settings_requested)
+        self._track_headers.bgm_track_add_requested.connect(self._media.on_add_bgm_track)
+        self._track_headers.bgm_track_remove_requested.connect(self._media.on_remove_bgm_track)
+        self._track_headers.bgm_track_rename_requested.connect(self._media.on_rename_bgm_track)
         self._track_headers.subtitle_rename_requested.connect(self._subtitle_ctrl.on_rename_active_track)
         self._timeline.status_message_requested.connect(lambda msg, t=0: self.statusBar().showMessage(msg, t))
 
@@ -386,9 +361,8 @@ class MainWindow(QMainWindow):
     def _refresh_all_widgets(self) -> None:
         """Push current model state to all widgets."""
         track = self._project.subtitle_track
-        font_family = self._project.default_style.font_family
         self._video_widget.set_subtitle_track(track if len(track) > 0 else None)
-        self._subtitle_panel.set_track(track if len(track) > 0 else None, font_family)
+        self._subtitle_panel.set_track(track if len(track) > 0 else None)
         self._timeline.set_track(track if len(track) > 0 else None)
         self._timeline.set_bgm_tracks(self._project.bgm_tracks)
 
@@ -408,7 +382,6 @@ class MainWindow(QMainWindow):
             self._controls.set_output_duration(self._project.duration_ms)
 
         self._timeline.set_project(self._project)
-        self._track_headers.set_active_track(self._ctx.current_track_index)
         self._autosave.notify_edit()
 
     def _ensure_timeline_duration(self) -> None:
@@ -431,60 +404,54 @@ class MainWindow(QMainWindow):
         names = [t.name or f"Track {i+1}" for i, t in enumerate(self._project.subtitle_tracks)]
         self._track_selector.set_tracks(names, self._project.active_track_index)
 
+    def _update_project_duration(self) -> None:
+        """Calculate and update the total project duration based on all tracks."""
+        if not self._project:
+            return
+            
+        max_ms = 0
+        
+        # 1. Video tracks
+        for vt in self._project.video_tracks:
+            max_ms = max(max_ms, vt.output_duration_ms)
+            
+        # 2. Subtitle tracks (text and TTS audio)
+        for st in self._project.subtitle_tracks:
+            if len(st) > 0:
+                max_ms = max(max_ms, st[-1].end_ms)
+            if st.audio_duration_ms > 0:
+                max_ms = max(max_ms, st.audio_start_ms + st.audio_duration_ms)
+                
+        # 3. Image overlays
+        if self._project.image_overlay_track:
+            for ov in self._project.image_overlay_track:
+                max_ms = max(max_ms, ov.end_ms)
+                
+        # 4. Text overlays
+        if self._project.text_overlay_track:
+            for ov in self._project.text_overlay_track.overlays:
+                max_ms = max(max_ms, ov.end_ms)
+                
+        # 5. BGM tracks
+        for bt in self._project.bgm_tracks:
+            for clip in bt.clips:
+                max_ms = max(max_ms, clip.start_ms + clip.duration_ms)
+                
+        self._project.duration_ms = max_ms
+        self._timeline.set_duration(max_ms)
+        self._controls.set_output_duration(max_ms)
+        self._timeline.update()
+
     # ------------------------------------------------------------ Local handlers
-
-    def _on_scene_detect(self) -> None:
-        """장면 감지 → 선택된 경계에서 클립 분할."""
-        if not self._ctx.project or not self._ctx.project.has_video:
-            QMessageBox.warning(self, tr("No Video"), tr("Please open a video file first."))
-            return
-
-        from src.ui.dialogs.scene_detect_dialog import SceneDetectDialog
-        from src.ui.commands import SplitClipCommand
-
-        video_path = str(self._ctx.project.video_path or "")
-        dlg = SceneDetectDialog(self, video_path)
-        if not dlg.exec():
-            return
-
-        boundaries = dlg.get_selected_boundaries()
-        if not boundaries:
-            return
-
-        vt = self._ctx.project.video_clip_track
-        if not vt or not vt.clips:
-            return
-
-        # 뒤에서부터 분할 → 앞쪽 클립 인덱스 불변 보장
-        self._undo_stack.beginMacro(tr("Detect Scenes"))
-        for ms in sorted(boundaries, reverse=True):
-            res = vt.clip_at_timeline(ms)
-            if not res:
-                continue
-            clip_idx, clip = res
-            local_ms = ms - vt.clip_timeline_start(clip_idx)
-            split_src = clip.source_in_ms + int(local_ms * clip.speed)
-            if split_src <= clip.source_in_ms + 100 or split_src >= clip.source_out_ms - 100:
-                continue
-            first, second = clip.split_at(local_ms)
-            self._undo_stack.push(
-                SplitClipCommand(self._ctx.project, 0, clip_idx, clip, first, second)
-            )
-        self._undo_stack.endMacro()
-        self._refresh_all_widgets()
 
     def _on_preferences(self) -> None:
         dialog = PreferencesDialog(self)
         if dialog.exec():
-            self.apply_shortcuts()
-            self._auto_sync.apply_settings()
             self.statusBar().showMessage(tr("Preferences updated"))
 
     def _toggle_magnetic_snap(self) -> None:
         enabled = self._snap_toggle_btn.isChecked()
         self._timeline.set_magnetic_snap(enabled)
-        msg = tr("Frame Snap ON") if enabled else tr("Frame Snap OFF")
-        self.statusBar().showMessage(msg, 2000)
 
     def _toggle_ripple_mode(self) -> None:
         enabled = self._ripple_toggle_btn.isChecked()
@@ -496,11 +463,16 @@ class MainWindow(QMainWindow):
         self._media.start_proxy_generation(Path(path))
 
     def _on_track_state_changed(self) -> None:
-        self._timeline._invalidate_static_cache()
+        """Update player and UI states when track flags (mute, hide, lock) change."""
         self._timeline.update()
+        self._track_headers.update()
+        
+        # Primary video track control
         if self._project.video_clip_track:
             self._audio_output.setMuted(self._project.video_clip_track.muted)
             self._video_widget.set_video_hidden(self._project.video_clip_track.hidden)
+            
+        # Subtitle/TTS control
         track = self._project.subtitle_track
         if track:
             self._tts_audio_output.setMuted(track.muted)
@@ -509,12 +481,11 @@ class MainWindow(QMainWindow):
             self._video_widget._update_image_overlays(pos)
             self._video_widget._update_text_overlays(pos)
         
-        # BGM Mute update
-        # Note: BGM mute state is checked during playback mixing or regeneration.
-        # For real-time preview, we might need to update audio output if we support separate BGM channels.
-        # Currently BGM is mixed via AudioMerger for export/regen. 
-        # If we have a separate QMediaPlayer for BGM preview, we would mute it here.
-        # For now, just updating UI state is enough as BGM preview might not be fully real-time separated yet.
+        # Handle other video tracks if any (layering logic would go here)
+        # For now, we only have one main player, so we mostly control the primary track.
+        
+        # BGM Mute update (Note: Real-time BGM preview is handled by PlaybackController/MediaController)
+        # If we had separate players for BGM, we would mute them here.
         
         self.statusBar().showMessage(tr("Track states updated"), 2000)
 
@@ -555,124 +526,6 @@ class MainWindow(QMainWindow):
             f"{tr('Video subtitle editor with Whisper-based automatic subtitle generation.')}",
         )
 
-    # ------------------------------------------------------------ UX2 handlers
-
-    def _apply_template_and_notify(self, tmpl) -> None:
-        """템플릿을 적용하고 상태바 메시지를 표시한다."""
-        from src.services.template_manager import TemplateManager
-        TemplateManager.apply_to_project(tmpl, self._project)
-        self._refresh_all_widgets()
-        self.statusBar().showMessage(
-            tr("Template applied: %s (%s)") % (tmpl.display_name, tmpl.aspect_label),
-            3000,
-        )
-
-    def _on_new_from_template(self) -> None:
-        """템플릿으로 새 프로젝트를 생성한다."""
-        from src.ui.dialogs.welcome_dialog import TemplatePickerDialog
-        dlg = TemplatePickerDialog(parent=self)
-        if dlg.exec() != dlg.DialogCode.Accepted:
-            return
-        tmpl = dlg.selected_template()
-        if not tmpl:
-            return
-        self._apply_template_and_notify(tmpl)
-
-    def show_welcome_dialog(self) -> None:
-        """앱 시작 시 웰컴 다이얼로그를 표시한다."""
-        from src.ui.dialogs.welcome_dialog import WelcomeDialog
-
-        recent = self._ctx.autosave.get_recent_files()
-        dlg = WelcomeDialog(recent_files=recent, parent=self)
-        result = dlg.exec()
-
-        if result == dlg.DialogCode.Accepted:
-            path = dlg.selected_recent()
-            tmpl = dlg.selected_template()
-            if path:
-                self._ctx.project_ctrl.on_load_project(path=path)
-            elif tmpl:
-                self._apply_template_and_notify(tmpl)
-        elif result == WelcomeDialog.RESULT_OPEN_FILE:
-            self._ctx.project_ctrl.on_load_project()
-        # RESULT_NEW_EMPTY or rejected → 기본 빈 프로젝트
-
-    # ------------------------------------------------------------ P2 handlers
-
-    def _on_verify_tts_timing(self) -> None:
-        """Whisper 역방향 검증으로 TTS 타이밍을 보정한다."""
-        track = self._project.subtitle_track
-        if not track or not track.audio_path:
-            QMessageBox.information(
-                self,
-                tr("No TTS Audio"),
-                tr("No TTS audio segments found.\nGenerate TTS first via Subtitles > Generate Speech."),
-            )
-            return
-
-        from src.ui.dialogs.tts_verify_dialog import TtsVerifyDialog
-        from src.ui.commands import ApplyTTSVerificationCommand
-
-        dlg = TtsVerifyDialog(track, self)
-        if dlg.exec() != dlg.DialogCode.Accepted:
-            return
-
-        corrections = dlg.get_corrections()
-        if not corrections:
-            return
-
-        self._undo_stack.push(ApplyTTSVerificationCommand(track, corrections))
-        self._refresh_all_widgets()
-        self.statusBar().showMessage(
-            tr("%d segments corrected") % len(corrections), 3000
-        )
-
-    def _on_batch_tts(self) -> None:
-        """배치 TTS 생성 다이얼로그를 연다."""
-        from src.ui.dialogs.batch_tts_dialog import BatchTtsDialog
-        dlg = BatchTtsDialog(self)
-        dlg.exec()
-
-    # ------------------------------------------------------------ Marker handlers
-
-    def _refresh_timeline_after_edit(self) -> None:
-        """마커/편집 후 타임라인을 갱신한다."""
-        self._project_ctrl.on_document_edited()
-        self._timeline._invalidate_static_cache()
-        self._timeline.update()
-
-    def _on_add_marker(self, ms: int) -> None:
-        """플레이헤드 위치에 마커 추가."""
-        from src.models.timeline_marker import TimelineMarker
-        from src.ui.commands import AddMarkerCommand
-        marker = TimelineMarker(ms=ms)
-        self._undo_stack.push(AddMarkerCommand(self._project, marker))
-        self._refresh_timeline_after_edit()
-        self.statusBar().showMessage(tr("Marker added"), 2000)
-
-    def _on_remove_marker(self, marker_idx: int) -> None:
-        """마커 삭제."""
-        if marker_idx < 0 or marker_idx >= len(self._project.markers):
-            return
-        from src.ui.commands import RemoveMarkerCommand
-        marker = self._project.markers[marker_idx]
-        self._undo_stack.push(RemoveMarkerCommand(self._project, marker))
-        self._refresh_timeline_after_edit()
-        self.statusBar().showMessage(tr("Marker removed"), 2000)
-
-    def _on_rename_marker(self, marker_idx: int, new_name: str) -> None:
-        """마커 이름 변경."""
-        if marker_idx < 0 or marker_idx >= len(self._project.markers):
-            return
-        from src.ui.commands import RenameMarkerCommand
-        marker = self._project.markers[marker_idx]
-        old_name = marker.name
-        if old_name == new_name:
-            return
-        self._undo_stack.push(RenameMarkerCommand(marker, old_name, new_name))
-        self._refresh_timeline_after_edit()
-        self.statusBar().showMessage(tr("Marker renamed"), 2000)
-
     # ------------------------------------------------------------ Lifecycle
 
     def _restore_geometry(self) -> None:
@@ -683,9 +536,6 @@ class MainWindow(QMainWindow):
         state = settings.value("window_state")
         if state:
             self.restoreState(state)
-
-    def _on_auto_sync_message(self, message: str, timeout_ms: int) -> None:
-        self.statusBar().showMessage(message, timeout_ms)
 
     def closeEvent(self, event) -> None:
         if self._media.is_proxy_generating():

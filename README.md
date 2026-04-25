@@ -231,20 +231,6 @@ src/
 
 ---
 
-## 📥 다운로드 (배포 버전)
-
-> 소스 빌드 없이 바로 사용하려면 아래 릴리즈 페이지에서 최신 버전을 받으세요.
-
-[![GitHub Releases](https://img.shields.io/github/v/release/Code2731/FastMovieMaker?label=최신%20버전&style=for-the-badge)](https://github.com/Code2731/FastMovieMaker/releases/latest)
-
-| 플랫폼 | 파일 | 비고 |
-|--------|------|------|
-| **Windows 10/11 (64-bit)** | `FastMovieMaker-windows-x64.zip` | FFmpeg 포함 |
-
-👉 **[전체 릴리즈 목록 보기](https://github.com/Code2731/FastMovieMaker/releases)**
-
----
-
 ## 🚀 설치 방법 (소스 빌드)
 
 ### 요구 사항

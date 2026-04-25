@@ -15,10 +15,12 @@ class TrackHeaderPanel(QWidget):
     
     # Signals for state changes
     state_changed = Signal()
-    track_add_requested = Signal()
-    track_remove_requested = Signal(int)
-    track_rename_requested = Signal(int)
-    track_settings_requested = Signal(int)   # track_index
+    track_add_requested = Signal()  # Default: Video
+    track_remove_requested = Signal(int) # Default: Video
+    track_rename_requested = Signal(int) # Default: Video
+    bgm_track_add_requested = Signal()
+    bgm_track_remove_requested = Signal(int)
+    bgm_track_rename_requested = Signal(int)
     subtitle_rename_requested = Signal()
     
     # Constants matching TimelineWidget
@@ -32,10 +34,6 @@ class TrackHeaderPanel(QWidget):
     _WAVEFORM_Y = 134
     _WAVEFORM_H = 45
     _IMG_BASE_Y = 184
-    _BGM_H = 34
-    _TRACK_GAP = 4
-    _IMG_ROW_H = 40
-    _TEXT_ROW_H = 28
     
     # Colors
     _BG_COLOR = QColor(25, 25, 25)
@@ -49,12 +47,6 @@ class TrackHeaderPanel(QWidget):
         self.setFixedWidth(120)
         self._timeline = timeline
         self._project = None
-        self._active_track_index: int = 0
-
-    def set_active_track(self, index: int) -> None:
-        """활성 비디오 트랙 인덱스를 설정하고 헤더를 갱신한다."""
-        self._active_track_index = index
-        self.update()
 
     def set_project(self, project):
         self._project = project
@@ -98,7 +90,7 @@ class TrackHeaderPanel(QWidget):
         # Image Overlays
         y = self._timeline._img_overlay_base_y()
         next_y = self._timeline._text_overlay_base_y()
-        h = max(self._IMG_ROW_H, next_y - y - self._TRACK_GAP)
+        h = max(self._timeline._IMG_ROW_H, next_y - y - self._timeline._TRACK_GAP)
         tracks.append({
             "y": y, "h": h, "name": "Images", "controls": "LH", "track_type": "overlay"
         })
@@ -106,7 +98,7 @@ class TrackHeaderPanel(QWidget):
         # Text Overlays
         y = next_y
         next_y = self._timeline._bgm_track_base_y()
-        h = max(self._TEXT_ROW_H, next_y - y - self._TRACK_GAP)
+        h = max(self._timeline._TEXT_ROW_H, next_y - y - self._timeline._TRACK_GAP)
         tracks.append({
             "y": y, "h": h, "name": "Text", "controls": "LH", "track_type": "text"
         })
@@ -155,10 +147,8 @@ class TrackHeaderPanel(QWidget):
             t = self._project.subtitle_track
             return t.locked, t.muted, t.hidden
         elif tt == "audio":
-            t = self._project.subtitle_track
-            if t is None:
-                return False, False, False
-            return getattr(t, "locked", False), getattr(t, "muted", False), getattr(t, "hidden", False)
+            t = self._project.subtitle_track # fallback
+            return t.locked, t.muted, t.hidden
         elif tt == "overlay":
             t = self._project.image_overlay_track
             return t.locked, False, t.hidden
@@ -172,11 +162,7 @@ class TrackHeaderPanel(QWidget):
 
     def _draw_track_header(self, painter, info):
         y, h, name = info["y"], info["h"], info["name"]
-
-        # 활성 비디오 트랙 인디케이터 (4px 파란 좌측 막대)
-        if info.get("track_type") == "video" and info.get("index") == self._active_track_index:
-            painter.fillRect(0, int(y), 4, int(h), self._ACTIVE_COLOR)
-
+        
         # BG for track
         painter.setPen(self._BORDER_COLOR)
         painter.drawLine(0, int(y + h), self.width(), int(y + h))
@@ -247,33 +233,38 @@ class TrackHeaderPanel(QWidget):
 
     def _show_context_menu(self, event):
         menu = QMenu(self)
-        add_act = menu.addAction(tr("Add Video Track"))
-
         y = event.position().y()
-        clicked_index = -1
-
+        
+        target_info = None
         for info in self._get_tracks_layout():
-            if info["track_type"] == "video":
-                ty = info["y"]
-                th = info["h"]
-                if ty <= y < ty + th:
-                    clicked_index = info["index"]
-                    break
-
+            ty = info["y"]
+            th = info["h"]
+            if ty <= y < ty + th:
+                target_info = info
+                break
+        
+        add_v_act = menu.addAction(tr("Add Video Track"))
+        add_bgm_act = menu.addAction(tr("Add BGM Track"))
+        
         remove_act = None
-        settings_act = None
-        if clicked_index >= 0:
-            if len(self._project.video_tracks) > 1:
+        if target_info:
+            if target_info["track_type"] == "video" and len(self._project.video_tracks) > 1:
+                menu.addSeparator()
                 remove_act = menu.addAction(tr("Remove Video Track"))
-            settings_act = menu.addAction(tr("Track Settings…"))
-
+            elif target_info["track_type"] == "bgm" and len(self._project.bgm_tracks) > 1:
+                menu.addSeparator()
+                remove_act = menu.addAction(tr("Remove BGM Track"))
+            
         action = menu.exec(event.globalPos())
-        if action == add_act:
+        if action == add_v_act:
             self.track_add_requested.emit()
+        elif action == add_bgm_act:
+            self.bgm_track_add_requested.emit()
         elif remove_act and action == remove_act:
-            self.track_remove_requested.emit(clicked_index)
-        elif settings_act and action == settings_act:
-            self.track_settings_requested.emit(clicked_index)
+            if target_info["track_type"] == "video":
+                self.track_remove_requested.emit(target_info["index"])
+            elif target_info["track_type"] == "bgm":
+                self.bgm_track_remove_requested.emit(target_info["index"])
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         if not self._project:
@@ -286,6 +277,8 @@ class TrackHeaderPanel(QWidget):
             if ty <= y < ty + th:
                 if info["track_type"] == "video":
                     self.track_rename_requested.emit(info["index"])
+                elif info["track_type"] == "bgm":
+                    self.bgm_track_rename_requested.emit(info["index"])
                 elif info["track_type"] in ("subtitle", "audio"):
                     # Audio track in header currently represents TTS audio of the subtitle track
                     self.subtitle_rename_requested.emit()
@@ -309,7 +302,7 @@ class TrackHeaderPanel(QWidget):
         elif tt == "bgm":
             target = self._project.bgm_tracks[info["index"]]
             
-        if target is not None:
+        if target:
             current = getattr(target, field)
             setattr(target, field, not current)
             self.state_changed.emit()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,8 +13,6 @@ from src.models.video_clip import VideoClipTrack
 from src.ui.commands import (
     AddVideoClipCommand,
     DeleteClipCommand,
-    EditColorCorrectionCommand,
-    EditColorLabelCommand,
     EditSpeedCommand,
     EditTransitionCommand,
     MoveVideoClipCommand,
@@ -66,27 +63,36 @@ class ClipController:
 
     def on_split_clip(self, track_idx: int, timeline_ms: int) -> None:
         ctx = self.ctx
+        
+        # Determine which track/clip to split
+        v_idx, clip_idx, clip = -1, -1, None
+        
         if track_idx >= 0:
-            # 우클릭 메뉴: 특정 트랙에서 직접 탐색
-            if not ctx.project or track_idx >= len(ctx.project.video_tracks):
-                ctx.status_bar().showMessage(tr("No video clips to split"), 3000)
-                return
-            vt = ctx.project.video_tracks[track_idx]
-            res = vt.clip_at_timeline(timeline_ms)
-            if not res:
-                ctx.status_bar().showMessage(tr("No video clips to split"), 3000)
-                return
-            clip_idx, clip = res
+            # Context menu case: specific track
             v_idx = track_idx
-        else:
-            # Ctrl+B 단축키: 최상위 트랙 자동 탐색
-            res = self.get_top_clip_at(timeline_ms)
-            if not res:
-                ctx.status_bar().showMessage(tr("No video clips to split"), 3000)
-                return
-            v_idx, clip_idx, clip = res
             vt = ctx.project.video_tracks[v_idx]
+            res = vt.clip_at_timeline(timeline_ms)
+            if res:
+                clip_idx, clip = res
+        else:
+            # Shortcut case (Ctrl+B): try current selected clip first, then top visible
+            curr_item_type, curr_v_idx, curr_c_idx = ctx.timeline.get_selected_item()
+            if curr_item_type == "clip":
+                vt = ctx.project.video_tracks[curr_v_idx]
+                res = vt.clip_at_timeline(timeline_ms)
+                if res and res[0] == curr_c_idx:
+                    v_idx, clip_idx, clip = curr_v_idx, res[0], res[1]
+            
+            if not clip:
+                res = self.get_top_clip_at(timeline_ms)
+                if res:
+                    v_idx, clip_idx, clip = res
 
+        if not clip:
+            ctx.status_bar().showMessage(tr("No video clips to split"), 3000)
+            return
+
+        vt = ctx.project.video_tracks[v_idx]
         offset = vt.clip_timeline_start(clip_idx)
         local_ms = timeline_ms - offset
         split_source = clip.source_in_ms + int(local_ms * clip.speed)
@@ -99,6 +105,7 @@ class ClipController:
         if was_playing:
             ctx.player.pause()
 
+        from src.ui.commands import SplitClipCommand
         original = clip
         first, second = clip.split_at(local_ms)
         cmd = SplitClipCommand(ctx.project, v_idx, clip_idx, original, first, second)
@@ -132,13 +139,15 @@ class ClipController:
         ctx.player.pause()
         sub_track = ctx.project.subtitle_track
         overlay_track = ctx.project.image_overlay_track
+        from src.ui.commands import DeleteClipCommand
         cmd = DeleteClipCommand(
             ctx.project, track_index, clip_index, clip, sub_track, overlay_track,
             clip_start_tl, clip_end_tl, ripple=ctx.timeline.is_ripple_mode()
         )
         ctx.undo_stack.push(cmd)
         ctx.timeline.select_clip(-1, -1)
-        ctx.project.duration_ms = ctx.project.video_tracks[track_index].output_duration_ms
+        
+        self.ctx.update_project_duration()
 
         ctx.current_clip_index = -1
         ctx.current_playback_source = None
@@ -167,56 +176,6 @@ class ClipController:
         ctx.refresh_all()
         ctx.status_bar().showMessage(f"{tr('Deleted clip')} {clip_index + 1}", 3000)
 
-    # ---- 멀티 클립 삭제 ----
-
-    def on_delete_selected_clips(self) -> None:
-        """선택된 클립들을 역순으로 삭제 (인덱스 오프셋 보정). macro Undo."""
-        ctx = self.ctx
-        if not ctx.project:
-            return
-        selected = ctx.timeline.get_selected_clips()
-        if not selected:
-            return
-
-        # 마지막 1개 보호: 각 트랙에서 삭제 후 클립이 0개가 되면 삭제 불가
-        track_delete_counts = Counter(ti for ti, _ in selected)
-        deletable = []
-        for track_idx, clip_idx in selected:
-            if track_idx >= len(ctx.project.video_tracks):
-                continue
-            vt = ctx.project.video_tracks[track_idx]
-            if len(vt.clips) - track_delete_counts[track_idx] >= 1:
-                deletable.append((track_idx, clip_idx))
-
-        if not deletable:
-            ctx.status_bar().showMessage(tr("Cannot delete the last clip"), 3000)
-            return
-
-        # 역순 정렬 (트랙별 내림차순 clip_idx → 이전 인덱스 유지)
-        deletable.sort(key=lambda x: (x[0], x[1]), reverse=True)
-
-        ctx.undo_stack.beginMacro(tr("Delete %d Clips") % len(deletable))
-        ripple = ctx.timeline.is_ripple_mode()
-        for track_idx, clip_idx in deletable:
-            vt = ctx.project.video_tracks[track_idx]
-            if clip_idx >= len(vt.clips):
-                continue
-            clip = vt.clips[clip_idx]
-            clip_start = vt.clip_timeline_start(clip_idx)
-            clip_end = clip_start + clip.duration_ms
-            cmd = DeleteClipCommand(
-                ctx.project, track_idx, clip_idx, clip,
-                ctx.project.subtitle_track,
-                ctx.project.image_overlay_track,
-                clip_start, clip_end,
-                ripple=ripple,
-            )
-            ctx.undo_stack.push(cmd)
-        ctx.undo_stack.endMacro()
-
-        ctx.timeline._clear_selection()
-        ctx.refresh_all()
-
     # ---- 클립 트림 ----
 
     def on_clip_trimmed(self, track_index: int, clip_index: int, new_source_in: int, new_source_out: int) -> None:
@@ -232,12 +191,13 @@ class ClipController:
         old_out = clip.source_out_ms
         sub_track = ctx.project.subtitle_track
         overlay_track = ctx.project.image_overlay_track
+        from src.ui.commands import TrimClipCommand
         cmd = TrimClipCommand(
             ctx.project, track_index, clip_index, old_in, old_out, new_source_in, new_source_out,
             sub_track, overlay_track, ripple=ctx.timeline.is_ripple_mode()
         )
         ctx.undo_stack.push(cmd)
-        ctx.project.duration_ms = ctx.project.video_tracks[track_index].output_duration_ms
+        self.ctx.update_project_duration()
         ctx.refresh_all()
 
     # ---- 클립 속도 ----
@@ -264,12 +224,13 @@ class ClipController:
         if speed != old_speed:
             sub_track = ctx.project.subtitle_track
             overlay_track = ctx.project.image_overlay_track
+            from src.ui.commands import EditSpeedCommand
             cmd = EditSpeedCommand(
                 ctx.project, track_index, clip_index, old_speed, speed,
                 sub_track, overlay_track, ripple=ctx.timeline.is_ripple_mode()
             )
             ctx.undo_stack.push(cmd)
-            ctx.project.duration_ms = ctx.project.video_tracks[track_index].output_duration_ms
+            self.ctx.update_project_duration()
             ctx.refresh_all()
 
     # ---- 트랜지션 ----
@@ -284,6 +245,7 @@ class ClipController:
         clip = vt.clips[clip_idx]
         from src.models.video_clip import TransitionInfo
         from src.ui.dialogs.transition_dialog import TransitionDialog
+        from src.ui.commands import EditTransitionCommand
         initial_type = clip.transition_out.type if clip.transition_out else "fade"
         initial_dur = clip.transition_out.duration_ms if clip.transition_out else 500
         
@@ -295,27 +257,8 @@ class ClipController:
             ripple = ctx.timeline.is_ripple_mode()
             command = EditTransitionCommand(ctx.project, track_idx, clip_idx, new_info, ripple=ripple)
             ctx.undo_stack.push(command)
-            ctx.project.duration_ms = ctx.project.video_clip_track.output_duration_ms
-            ctx.timeline.set_duration(ctx.project.duration_ms)
+            self.ctx.update_project_duration()
             ctx.refresh_all()
-
-    def on_remove_transition(self, track_idx: int, clip_idx: int) -> None:
-        """트랜지션을 제거합니다 (EditTransitionCommand에 None 전달)."""
-        ctx = self.ctx
-        if not ctx.project:
-            return
-        vt = ctx.project.video_tracks[track_idx]
-        if clip_idx < 0 or clip_idx >= len(vt.clips):
-            return
-        cmd = EditTransitionCommand(
-            ctx.project, track_idx, clip_idx,
-            None,  # new_info=None → 트랜지션 제거
-            ripple=ctx.timeline.is_ripple_mode()
-        )
-        ctx.undo_stack.push(cmd)
-        ctx.project.duration_ms = ctx.project.video_clip_track.output_duration_ms
-        ctx.timeline.set_duration(ctx.project.duration_ms)
-        ctx.refresh_all()
 
     # ---- 클립 이동 ----
 
@@ -381,74 +324,11 @@ class ClipController:
                         sub_track, overlay_track, ripple=ctx.timeline.is_ripple_mode()
                     )
                     ctx.undo_stack.push(cmd_speed)
-                    ctx.project.duration_ms = ctx.project.video_tracks[track_idx].output_duration_ms
+                    self.ctx.update_project_duration()
                 
                 ctx.undo_stack.endMacro()
                 ctx.project_ctrl.on_document_edited()
                 ctx.refresh_all()
-
-    def on_edit_clip_color(self, track_idx: int, clip_idx: int) -> None:
-        """컬러 보정 다이얼로그 열기."""
-        ctx = self.ctx
-        if not ctx.project or track_idx < 0 or track_idx >= len(ctx.project.video_tracks):
-            return
-        vt = ctx.project.video_tracks[track_idx]
-        if clip_idx < 0 or clip_idx >= len(vt.clips):
-            return
-        clip = vt.clips[clip_idx]
-        from src.ui.dialogs.color_correction_dialog import ColorCorrectionDialog
-        dialog = ColorCorrectionDialog(
-            ctx.window,
-            initial_brightness=clip.brightness,
-            initial_contrast=clip.contrast,
-            initial_saturation=clip.saturation,
-            initial_hue=getattr(clip, "hue", 0.0),
-        )
-        if not dialog.exec():
-            return
-        vals = dialog.get_values()
-        new_br, new_ct, new_sat, new_hue = vals["brightness"], vals["contrast"], vals["saturation"], vals["hue"]
-        old_hue = getattr(clip, "hue", 0.0)
-        if new_br == clip.brightness and new_ct == clip.contrast and new_sat == clip.saturation and new_hue == old_hue:
-            return
-        ctx.undo_stack.push(EditColorCorrectionCommand(
-            clip, clip.brightness, clip.contrast, clip.saturation,
-            new_br, new_ct, new_sat,
-            old_hue=old_hue, new_hue=new_hue,
-        ))
-        ctx.project_ctrl.on_document_edited()
-        ctx.timeline._invalidate_static_cache()
-        ctx.timeline.update()
-        ctx.status_bar().showMessage(tr("Color correction applied"), 3000)
-
-    def on_bulk_edit_color(self, track_idx: int) -> None:
-        """트랙 내 모든 클립에 동일한 컬러 보정 일괄 적용."""
-        ctx = self.ctx
-        if not ctx.project or track_idx < 0 or track_idx >= len(ctx.project.video_tracks):
-            return
-        vt = ctx.project.video_tracks[track_idx]
-        if not vt.clips:
-            return
-        from src.ui.dialogs.color_correction_dialog import ColorCorrectionDialog
-        dialog = ColorCorrectionDialog(ctx.window)
-        if not dialog.exec():
-            return
-        vals = dialog.get_values()
-        new_br, new_ct, new_sat, new_hue = vals["brightness"], vals["contrast"], vals["saturation"], vals["hue"]
-        ctx.undo_stack.beginMacro(tr("Apply color to all clips"))
-        for clip in vt.clips:
-            old_hue = getattr(clip, "hue", 0.0)
-            ctx.undo_stack.push(EditColorCorrectionCommand(
-                clip, clip.brightness, clip.contrast, clip.saturation,
-                new_br, new_ct, new_sat,
-                old_hue=old_hue, new_hue=new_hue,
-            ))
-        ctx.undo_stack.endMacro()
-        ctx.project_ctrl.on_document_edited()
-        ctx.timeline._invalidate_static_cache()
-        ctx.timeline.update()
-        n = len(vt.clips)
-        ctx.status_bar().showMessage(tr("Color correction applied to %d clips") % n, 3000)
 
     # ---- 트랙 관리 ----
 
@@ -470,58 +350,25 @@ class ClipController:
 
     def on_rename_video_track(self, index: int) -> None:
         """Rename a video track."""
+        if not self.ctx.project or index < 0 or index >= len(self.ctx.project.video_tracks):
+            return
+            
+        track = self.ctx.project.video_tracks[index]
+        current_name = track.name or f"Video {index + 1}"
+        
         from PySide6.QtWidgets import QInputDialog
-        ctx = self.ctx
-        if not ctx.project or index < 0 or index >= len(ctx.project.video_tracks):
-            return
-        current_name = ctx.project.video_tracks[index].name
         name, ok = QInputDialog.getText(
-            None, tr("Rename Track"), tr("Track name:"),
-            text=current_name,
+            self.ctx.window, tr("Rename Video Track"), 
+            tr("New name:"), text=current_name
         )
+        
         if ok and name.strip():
-            ctx.project.video_tracks[index].name = name.strip()
-            ctx.track_header.set_project(ctx.project)
-
-    def on_track_settings_requested(self, index: int) -> None:
-        """비디오 트랙 블렌드 모드 / 크로마키 설정 다이얼로그를 연다."""
-        from src.ui.commands import EditTrackBlendModeCommand
-        from src.ui.dialogs.track_settings_dialog import TrackSettingsDialog
-        ctx = self.ctx
-        if not ctx.project or index < 0 or index >= len(ctx.project.video_tracks):
-            return
-        vt = ctx.project.video_tracks[index]
-        dlg = TrackSettingsDialog(
-            vt.blend_mode, vt.chroma_color,
-            vt.chroma_similarity, vt.chroma_blend,
-        )
-        if dlg.exec():
-            cmd = EditTrackBlendModeCommand(
-                vt, dlg.blend_mode, dlg.chroma_color,
-                dlg.chroma_similarity, dlg.chroma_blend,
-            )
-            ctx.undo_stack.push(cmd)
-            ctx.project_ctrl.on_document_edited()
-            ctx.timeline._invalidate_static_cache()
-            ctx.timeline.update()
-
-    def on_set_color_label(self, track_idx: int, clip_idx: int, label: str) -> None:
-        """클립 컬러 레이블 변경. Undo/Redo 지원."""
-        ctx = self.ctx
-        if not ctx.project or track_idx < 0 or track_idx >= len(ctx.project.video_tracks):
-            return
-        vt = ctx.project.video_tracks[track_idx]
-        if clip_idx < 0 or clip_idx >= len(vt.clips):
-            return
-        clip = vt.clips[clip_idx]
-        if clip.color_label == label:
-            return
-        ctx.undo_stack.push(EditColorLabelCommand(clip, clip.color_label, label))
-        ctx.project_ctrl.on_document_edited()
-        ctx.timeline._invalidate_static_cache()
-        ctx.timeline.update()
-        label_display = label.capitalize() if label != "none" else tr("None")
-        ctx.status_bar().showMessage(tr("Color label set") + f": {label_display}", 3000)
+            from src.ui.commands import RenameVideoTrackCommand
+            cmd = RenameVideoTrackCommand(track, track.name, name.strip())
+            self.ctx.undo_stack.push(cmd)
+            self.ctx.refresh_all()
+            if self.ctx.track_header:
+                self.ctx.track_header.update()
 
     # ---- 복사 / 붙여넣기 ----
 
@@ -614,32 +461,6 @@ class ClipController:
                 self.ctx.media_ctrl.load_video(path)
             else:
                 self.add_video_to_timeline(path, position_ms, track_index)
-                # For subsequent clips, we could advance position_ms, but add_video_to_timeline
-                # handles insertion at specific point. If we want sequential, we should
-                # update position_ms. However, add_video_to_timeline calculates insertion index.
-                # If we drop multiple files at same position, they will be inserted at that position.
-                # To make them sequential, we rely on the fact that inserting at index X shifts existing clips.
-                # But if we insert at time T, we get index I. Next clip at time T gets index I (pushing previous).
-                # So they would be reversed if we don't increment time or index.
-                # Let's just let them insert at the drop point. The user can arrange them.
-                # Actually, standard behavior is sequential.
-                # Let's try to estimate duration to advance position?
-                # Doing probe here is slow.
-                # Let's just insert them all at the drop point. They will push each other.
-                # If we insert A then B at same index, B comes before A?
-                # No, insert(i, A) -> A is at i. insert(i+1, B) -> B is after A.
-                # We need to increment insertion index or time.
-                # Since add_video_to_timeline calculates index from time, we should probably
-                # just call it. If we call it with same time, it finds same index.
-                # If we insert A, it shifts everything. Next insert at same time finds same index (start of A).
-                # So B would be inserted before A?
-                # Let's check: clip_at_timeline(T) returns clip covering T.
-                # If we insert A at T. A covers T.
-                # Next call clip_at_timeline(T) returns A.
-                # We split A? No, we want to append.
-                # This is tricky without knowing durations.
-                # For now, let's just add them. The user can reorder.
-                pass
 
     def add_video_to_timeline(self, path: Path, position_ms: int, track_index: int = -1) -> None:
         """외부 비디오 파일을 클립으로 추가."""
@@ -665,25 +486,28 @@ class ClipController:
             ctx.project.video_tracks.append(VideoClipTrack())
         clip_track = ctx.project.video_tracks[v_idx]
 
+        # Use UndoStack macro to group split and add if needed
+        ctx.undo_stack.beginMacro(tr("Add Video Clip"))
+        
+        insert_index = len(clip_track.clips)
         result = clip_track.clip_at_timeline(position_ms)
         if result is not None:
             idx, existing_clip = result
             clip_start = clip_track.clip_timeline_start(idx)
             local_offset = position_ms - clip_start
-            if local_offset > existing_clip.duration_ms * 0.8:
+            
+            # Decide whether to split or insert before/after
+            if local_offset > existing_clip.duration_ms * 0.95:
                 insert_index = idx + 1
-            elif local_offset < existing_clip.duration_ms * 0.2:
+            elif local_offset < existing_clip.duration_ms * 0.05:
                 insert_index = idx
             else:
-                from src.models.video_clip import VideoClip as VC
-                source_split = existing_clip.source_in_ms + local_offset
-                first = VC(existing_clip.source_in_ms, source_split, source_path=existing_clip.source_path)
-                second = VC(source_split, existing_clip.source_out_ms, source_path=existing_clip.source_path)
-                clip_track.clips[idx] = first
-                clip_track.clips.insert(idx + 1, second)
+                # Split existing clip via Command
+                from src.ui.commands import SplitClipCommand
+                first, second = existing_clip.split_at(local_offset)
+                split_cmd = SplitClipCommand(ctx.project, v_idx, idx, existing_clip, first, second)
+                ctx.undo_stack.push(split_cmd)
                 insert_index = idx + 1
-        else:
-            insert_index = len(clip_track.clips)
 
         sub_track = ctx.project.subtitle_track
         overlay_track = ctx.project.image_overlay_track
@@ -691,16 +515,16 @@ class ClipController:
             ctx.project, v_idx, clip, sub_track, overlay_track, insert_index,
             ripple=ctx.timeline.is_ripple_mode()
         )
-        ctx.undo_stack.push(cmd)
+        self.ctx.undo_stack.push(cmd)
+        self.ctx.undo_stack.endMacro()
 
         if ctx.use_proxies:
             ctx.media_ctrl.start_proxy_generation(path)
 
-        ctx.project.duration_ms = ctx.project.video_tracks[v_idx].output_duration_ms
-        ctx.timeline.set_duration(ctx.project.duration_ms, has_video=True)
+        self.ctx.update_project_duration()
         ctx.timeline.set_clip_track(ctx.project.video_tracks[v_idx])
         ctx.timeline.refresh()
-        ctx.controls.set_output_duration(ctx.project.duration_ms)
+
         ctx.autosave.notify_edit()
         ctx.status_bar().showMessage(
             f"{tr('Added video clip')}: {path.name} ({info.duration_ms // 1000}s)"
@@ -712,3 +536,16 @@ class ClipController:
             ctx.playback_ctrl.on_timeline_seek(0)
         else:
             ctx.playback_ctrl.on_timeline_seek(current_timeline_pos)
+
+    def _add_clip_at(self, track_index: int, clip: VideoClip, insert_index: int) -> None:
+        """Helper to add a clip via command."""
+        ctx = self.ctx
+        sub_track = ctx.project.subtitle_track
+        overlay_track = ctx.project.image_overlay_track
+        cmd = AddVideoClipCommand(
+            ctx.project, track_index, clip, sub_track, overlay_track, insert_index,
+            ripple=ctx.timeline.is_ripple_mode()
+        )
+        ctx.undo_stack.push(cmd)
+        self.ctx.update_project_duration()
+        ctx.refresh_all()

@@ -6,12 +6,9 @@ TimelineWidget은 이벤트 핸들링·공개 API에 집중한다.
 
 from __future__ import annotations
 
-import logging
-import os
-import time
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QPoint, QPointF, QRectF, QLineF
+from PySide6.QtCore import Qt, QPoint, QRectF
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -31,8 +28,6 @@ from src.models.video_clip import VideoClip, VideoClipTrack
 from src.services.waveform_service import WaveformData
 from src.utils.time_utils import ms_to_display
 
-from src.ui.styles.theme import TimelineTheme
-
 if TYPE_CHECKING:
     from src.ui.timeline_widget import TimelineWidget
 
@@ -48,177 +43,82 @@ _BGM_H = 34
 class TimelinePainter:
     """TimelineWidget 전용 렌더러 — 모든 _draw_* 메서드를 소유."""
 
-    # ---- 색상/스타일 (Theme에서 로드) ----
-    _BG_COLOR = TimelineTheme.BG
-    _RULER_BG_COLOR = TimelineTheme.RULER_BG
-    _RULER_COLOR = TimelineTheme.RULER_TICK
-    _RULER_TEXT_COLOR = TimelineTheme.RULER_TEXT
+    # ---- 색상/스타일 상수 ----
+    # Background
+    _BG_COLOR = QColor(18, 18, 18)
+    _RULER_BG_COLOR = QColor(25, 25, 25)
+    _RULER_COLOR = QColor(60, 60, 60)
+    _RULER_TEXT_COLOR = QColor(140, 140, 140)
 
-    _SEGMENT_COLOR_TOP = TimelineTheme.SEGMENT_TOP
-    _SEGMENT_COLOR_BOT = TimelineTheme.SEGMENT_BOT
-    _SEGMENT_BORDER = TimelineTheme.SEGMENT_BORDER
-    _SELECTED_BORDER = TimelineTheme.SELECTED_BORDER
-    _SELECTED_GLOW = TimelineTheme.SELECTED_GLOW
+    # Subtitle Segments
+    _SEGMENT_COLOR_TOP = QColor(60, 140, 220)
+    _SEGMENT_COLOR_BOT = QColor(40, 100, 180)
+    _SEGMENT_BORDER = QColor(80, 170, 255)
+    _SELECTED_BORDER = QColor(100, 220, 255)
+    _SELECTED_GLOW = QColor(100, 220, 255, 60)
 
-    _SNAP_GUIDE_COLOR = TimelineTheme.SNAP_GUIDE
-    _PLAYHEAD_COLOR = TimelineTheme.PLAYHEAD
-    _PLAYHEAD_LINE_COLOR = TimelineTheme.PLAYHEAD_LINE
+    # Snap
+    _SNAP_GUIDE_COLOR = QColor(255, 255, 0, 200)
 
-    _AUDIO_COLOR_TOP = TimelineTheme.AUDIO_TOP
-    _AUDIO_BORDER = TimelineTheme.AUDIO_BORDER
+    # Playhead
+    _PLAYHEAD_COLOR = QColor(255, 60, 80)
+    _PLAYHEAD_LINE_COLOR = QColor(255, 60, 80, 200)
 
-    _BGM_COLOR_TOP = TimelineTheme.BGM_TOP
-    _BGM_COLOR_BOT = TimelineTheme.BGM_BOT
-    _BGM_BORDER = TimelineTheme.BGM_BORDER
-    _BGM_SELECTED_BORDER = TimelineTheme.BGM_SELECTED_BORDER
-    _BGM_SELECTED_COLOR = TimelineTheme.BGM_SELECTED_BG
+    # Audio (TTS)
+    _AUDIO_COLOR_TOP = QColor(80, 180, 100)
+    _AUDIO_BORDER = QColor(100, 200, 120)
 
-    _CORRECTION_BADGE_BRUSH = TimelineTheme.CORRECTION_BADGE
-    _ANIMATION_BADGE_BRUSH = TimelineTheme.ANIMATION_BADGE
+    # BGM
+    _BGM_COLOR_TOP = QColor(100, 80, 200)
+    _BGM_COLOR_BOT = QColor(60, 40, 160)
+    _BGM_BORDER = QColor(130, 100, 240)
+    _BGM_SELECTED_BORDER = QColor(100, 220, 255)
+    _BGM_SELECTED_COLOR = QColor(40, 20, 100)
 
-    _WAVEFORM_FILL = TimelineTheme.WAVEFORM_FILL
-    _WAVEFORM_EDGE = TimelineTheme.WAVEFORM_EDGE
-    _WAVEFORM_CENTER = TimelineTheme.WAVEFORM_CENTER
+    # Waveform
+    _WAVEFORM_FILL = QColor(255, 140, 40, 120)
+    _WAVEFORM_EDGE = QColor(255, 180, 80, 200)
+    _WAVEFORM_CENTER = QColor(255, 220, 150)
 
-    _VOLUME_LINE_COLOR = TimelineTheme.VOLUME_LINE
-    _VOLUME_POINT_COLOR = TimelineTheme.VOLUME_POINT
+    # Volume Envelope
+    _VOLUME_LINE_COLOR = QColor(255, 255, 255, 200)
+    _VOLUME_POINT_COLOR = QColor(255, 255, 255)
     _VOLUME_POINT_RADIUS = 4
 
-    _IMG_OVERLAY_COLOR = TimelineTheme.IMG_OVERLAY
-    _IMG_OVERLAY_BORDER = TimelineTheme.IMG_OVERLAY_BORDER
-    _IMG_OVERLAY_SELECTED_BORDER = TimelineTheme.SELECTED_BORDER
-    _IMG_OVERLAY_SELECTED_COLOR = TimelineTheme.IMG_OVERLAY_SELECTED_BG
+    # Image Overlay
+    _IMG_OVERLAY_COLOR = QColor(160, 90, 220, 180)
+    _IMG_OVERLAY_BORDER = QColor(190, 120, 240)
+    _IMG_OVERLAY_SELECTED_BORDER = QColor(100, 220, 255)
+    _IMG_OVERLAY_SELECTED_COLOR = QColor(0, 100, 140)
 
     # Text Overlay
-    _TEXT_OVERLAY_COLOR = TimelineTheme.TEXT_OVERLAY
-    _TEXT_OVERLAY_BORDER = TimelineTheme.TEXT_OVERLAY_BORDER
-    _TEXT_OVERLAY_SELECTED_COLOR = TimelineTheme.TEXT_OVERLAY_SELECTED_BG
-    _TEXT_OVERLAY_SELECTED_BORDER = TimelineTheme.TEXT_OVERLAY_SELECTED_BORDER
+    _TEXT_OVERLAY_COLOR = QColor(255, 180, 80, 180)
+    _TEXT_OVERLAY_BORDER = QColor(255, 200, 120)
+    _TEXT_OVERLAY_SELECTED_COLOR = QColor(255, 140, 40)
+    _TEXT_OVERLAY_SELECTED_BORDER = QColor(255, 220, 160)
 
     # Clip Colors
-    _CLIP_SELECTED_BORDER = TimelineTheme.CLIP_SELECTED_BORDER
-    _CLIP_SELECTED_COLOR = TimelineTheme.CLIP_SELECTED_BG
-    _TRANSITION_MARKER_COLOR = TimelineTheme.TRANSITION_MARKER
+    _CLIP_SELECTED_BORDER = QColor(100, 220, 255)
+    _CLIP_SELECTED_COLOR = QColor(0, 100, 140)
+    _TRANSITION_MARKER_COLOR = QColor(255, 215, 0, 180)
+    
+    _LOCKED_OVERLAY_COLOR = QColor(0, 0, 0, 100)
+    _LOCKED_ICON_COLOR = QColor(255, 255, 255, 180)
 
-    _SOURCE_COLORS = TimelineTheme.SOURCE_COLORS
-    _MARKER_COLORS = TimelineTheme.MARKER_COLORS
-    _LABEL_COLORS = TimelineTheme.LABEL_COLORS
+    _SOURCE_COLORS = [
+        (QColor(0, 160, 160), QColor(0, 120, 120), QColor(0, 200, 200)),
+        (QColor(200, 120, 40), QColor(160, 90, 20), QColor(230, 150, 60)),
+        (QColor(140, 70, 190), QColor(100, 40, 150), QColor(170, 100, 220)),
+        (QColor(60, 160, 80), QColor(40, 120, 50), QColor(90, 190, 110)),
+        (QColor(200, 60, 80), QColor(150, 40, 60), QColor(230, 90, 110)),
+        (QColor(70, 110, 200), QColor(40, 80, 160), QColor(100, 140, 230)),
+    ]
 
     def __init__(self, tw: TimelineWidget) -> None:
         self.tw = tw
         # 웨이브폼 이미지 캐시
         self._waveform_image_cache: QImage | None = None
         self._waveform_cache_key: tuple | None = None
-        # 자주 쓰는 페인터 객체 재사용 (프레임당 생성 비용 감소)
-        self._font_small = QFont("Arial", 8)
-        self._audio_brush = QBrush(self._AUDIO_COLOR_TOP)
-        self._audio_pen = QPen(self._AUDIO_BORDER, 1)
-        self._segment_pen = QPen(self._SEGMENT_BORDER, 1)
-        self._segment_selected_pen = QPen(self._SELECTED_BORDER, 1)
-        self._segment_text_cache: dict[tuple[str, int], str] = {}
-        self._visible_window_cache_key: tuple[int, int, int] | None = None
-        self._visible_window_cache: tuple[int, int] = (0, 0)
-        # (track_id, clip_count) 키 캐시 — paintEvent마다 O(n log n) 재계산 방지
-        self._source_color_cache_key: tuple[int, int] | None = None
-        self._source_color_cache: dict = {}
-        self._render_metrics_enabled = os.getenv("FMM_TIMELINE_RENDER_METRICS", "").strip() == "1"
-        self._logger = logging.getLogger(__name__)
-
-    def _visible_segment_window(self) -> tuple[int, int]:
-        """Return visible segment index window for the current viewport."""
-        tw = self.tw
-        if not tw._track:
-            return 0, 0
-        visible_start = int(tw._visible_start_ms)
-        visible_end = int(tw._visible_start_ms + tw._visible_range_ms())
-        cache_key = (id(tw._track), visible_start, visible_end)
-        if self._visible_window_cache_key == cache_key:
-            return self._visible_window_cache
-        window = tw._track.visible_range_indices(visible_start, visible_end)
-        self._visible_window_cache_key = cache_key
-        self._visible_window_cache = window
-        return window
-
-    @staticmethod
-    def _style_signature(seg) -> tuple | None:
-        style = getattr(seg, "style", None)
-        if style is None:
-            return None
-        return (
-            style.font_family,
-            style.font_size,
-            style.font_bold,
-            style.font_italic,
-            style.font_color,
-            style.outline_color,
-            style.outline_width,
-            style.bg_color,
-            style.position,
-            style.margin_bottom,
-            style.custom_x,
-            style.custom_y,
-        )
-
-    def _segment_paint_signature(self) -> tuple:
-        """Build signature for visible subtitle/audio content used by static cache."""
-        tw = self.tw
-        if not tw._track:
-            return ()
-        start_idx, end_idx = self._visible_segment_window()
-        sig: list[tuple] = []
-        for i in range(start_idx, end_idx):
-            seg = tw._track[i]
-            anim = getattr(seg, "animation", None)
-            sig.append(
-                (
-                    i,
-                    seg.start_ms,
-                    seg.end_ms,
-                    seg.text,
-                    bool(seg.audio_file),
-                    bool(anim is not None and anim.is_active),
-                    self._style_signature(seg),
-                )
-            )
-        return tuple(sig)
-
-    def _static_cache_invalidation_signature(self) -> tuple:
-        """Return minimal signature fields that should invalidate static cache."""
-        tw = self.tw
-        clip_count = (
-            tuple(len(vt.clips) for vt in tw._project.video_tracks)
-            if tw._project else ()
-        )
-        ovl_count = len(tw._image_overlay_track) if tw._image_overlay_track else 0
-        v_h = tw._clip_track.hidden if tw._clip_track else False
-        s_h = tw._track.hidden if tw._track else False
-        o_h = tw._image_overlay_track.hidden if tw._image_overlay_track else False
-        return (
-            tw._selected_index,
-            tw._selected_overlay_index,
-            tw._selected_clip_index,
-            tw._selected_clip_track_index,
-            frozenset(tw._selected_clips),
-            clip_count,
-            self._segment_paint_signature(),
-            ovl_count,
-            tw._has_video,
-            id(tw._waveform_data),
-            v_h,
-            s_h,
-            o_h,
-        )
-
-    def _build_static_cache_key(self, w: int, h: int, visible_ms: float) -> tuple:
-        """Return static timeline render cache key."""
-        tw = self.tw
-        return (
-            w,
-            h,
-            tw._visible_start_ms,
-            visible_ms,
-            self._static_cache_invalidation_signature(),
-        )
 
     # ================================================================
     # 메인 페인트 엔트리
@@ -227,7 +127,6 @@ class TimelinePainter:
     def paint(self) -> None:
         """TimelineWidget.paintEvent에서 호출되는 메인 렌더링 루틴."""
         tw = self.tw
-        t0 = time.perf_counter() if self._render_metrics_enabled else 0.0
         w = tw.width()
         h = tw.height()
 
@@ -245,7 +144,28 @@ class TimelinePainter:
             visible_ms = tw._duration_ms
         tw._px_per_ms = w / visible_ms
 
-        cache_key = self._build_static_cache_key(w, h, visible_ms)
+        # 정적 레이어 캐시 키
+        seg_count = len(tw._track) if tw._track else 0
+        ovl_count = len(tw._image_overlay_track) if tw._image_overlay_track else 0
+        clip_count = len(tw._clip_track) if tw._clip_track else 0
+        v_h = tw._clip_track.hidden if tw._clip_track else False
+        s_h = tw._track.hidden if tw._track else False
+        o_h = tw._image_overlay_track.hidden if tw._image_overlay_track else False
+        
+        v_l = tw._clip_track.locked if tw._clip_track else False
+        s_l = tw._track.locked if tw._track else False
+        o_l = tw._image_overlay_track.locked if tw._image_overlay_track else False
+        t_l = tw._text_overlay_track.locked if tw._text_overlay_track else False
+
+        cache_key = (
+            w, h, tw._visible_start_ms, visible_ms,
+            tw._selected_index, tw._selected_overlay_index,
+            tw._selected_clip_index, clip_count,
+            seg_count, ovl_count, tw._has_video,
+            id(tw._waveform_data),
+            v_h, s_h, o_h,
+            v_l, s_l, o_l, t_l
+        )
 
         if tw._static_cache_key != cache_key or tw._static_cache is None:
             pixmap = QPixmap(w, h)
@@ -283,15 +203,11 @@ class TimelinePainter:
         painter = QPainter(tw)
         painter.drawPixmap(0, 0, tw._static_cache)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self._draw_markers(painter, h)
         self._draw_playhead(painter, h)
         self._draw_track_highlight(painter, w)
         self._draw_snap_indicator(painter, h)
         self._draw_drop_indicator(painter, h)
         painter.end()
-        if self._render_metrics_enabled:
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
-            self._logger.debug("timeline paint: %.2f ms", elapsed_ms)
 
     # ================================================================
     # 개별 드로잉 메서드
@@ -301,7 +217,7 @@ class TimelinePainter:
         """상단 눈금자."""
         tw = self.tw
         painter.fillRect(0, 0, w, _RULER_H, self._RULER_BG_COLOR)
-        painter.setFont(self._font_arial_8)
+        painter.setFont(QFont("Arial", 8))
         tick_ms = self._nice_tick_interval(visible_ms)
         if tick_ms <= 0:
             return
@@ -387,7 +303,7 @@ class TimelinePainter:
         label_x = max(5, int(tw._ms_to_x(0)) + 5)
         if 0 < label_x < w - 80:
             painter.setPen(QColor(255, 200, 100, 200))
-            painter.setFont(self._font_arial_8)
+            painter.setFont(QFont("Arial", 8))
             painter.drawText(label_x, waveform_y + 10, "Video Audio")
 
     def _render_waveform_image(self, w: int, h: int) -> QImage:
@@ -489,7 +405,7 @@ class TimelinePainter:
         label_x = max(5, int(tw._ms_to_x(0)) + 5)
         if 0 < label_x < w - 120:
             painter.setPen(QColor(150, 150, 150, 150))
-            painter.setFont(self._font_arial_8)
+            painter.setFont(QFont("Arial", 8))
             painter.drawText(label_x, waveform_y + 10, "Video Audio (loading...)")
 
     # ---- Audio / Subtitle ----
@@ -499,11 +415,10 @@ class TimelinePainter:
         tw = self.tw
         if not tw._track:
             return
-        start_idx, end_idx = self._visible_segment_window()
         y = tw._audio_track_y()
         track_h = _AUDIO_H
-        for i in range(start_idx, end_idx):
-            seg = tw._track[i]
+        is_locked = tw._track.locked
+        for i, seg in enumerate(tw._track):
             if not seg.audio_file:
                 continue
             x1 = tw._ms_to_x(seg.start_ms)
@@ -511,16 +426,17 @@ class TimelinePainter:
             if x2 < 0 or x1 > tw.width():
                 continue
             rect = QRectF(x1, y, x2 - x1, track_h)
-            painter.setBrush(self._audio_brush)
-            painter.setPen(self._audio_pen)
+            painter.setBrush(QBrush(self._AUDIO_COLOR_TOP))
+            painter.setPen(QPen(self._AUDIO_BORDER, 1))
             painter.drawRoundedRect(rect, 4, 4)
+            if is_locked:
+                self._draw_lock_feedback(painter, rect)
 
     def _draw_segments(self, painter: QPainter, h: int) -> None:
         """자막 세그먼트 (파란 그라데이션)."""
         tw = self.tw
         if not tw._track:
             return
-        start_idx, end_idx = self._visible_segment_window()
         y = tw._subtitle_track_y()
         track_h = _SEG_H
         # 로컬 변수 캐싱 — self.tw._xxx 딕셔너리 룩업 체인 제거
@@ -529,11 +445,11 @@ class TimelinePainter:
         selected_idx = tw._selected_index
         seg_top = self._SEGMENT_COLOR_TOP
         seg_bot = self._SEGMENT_COLOR_BOT
+        seg_border = self._SEGMENT_BORDER
+        sel_border = self._SELECTED_BORDER
         sel_glow = self._SELECTED_GLOW
-        painter.setFont(self._font_small)
-        fm = painter.fontMetrics()
-        for i in range(start_idx, end_idx):
-            seg = tw._track[i]
+        is_locked = tw._track.locked
+        for i, seg in enumerate(tw._track):
             x1 = ms_to_x(seg.start_ms)
             x2 = ms_to_x(seg.end_ms)
             if x2 < 0 or x1 > widget_w:
@@ -542,40 +458,28 @@ class TimelinePainter:
             is_selected = (selected_idx == i)
             top = seg_top
             bot = seg_bot
-            border_pen = self._segment_pen
+            border = seg_border
             if is_selected:
-                border_pen = self._segment_selected_pen
+                border = sel_border
                 painter.setBrush(QBrush(sel_glow))
                 painter.drawRect(rect.adjusted(-2, -2, 2, 2))
             grad = QLinearGradient(rect.topLeft(), rect.bottomLeft())
             grad.setColorAt(0, top)
             grad.setColorAt(1, bot)
             painter.setBrush(grad)
-            painter.setPen(border_pen)
+            painter.setPen(QPen(border, 1))
             painter.drawRoundedRect(rect, 4, 4)
+            
+            if is_locked:
+                self._draw_lock_feedback(painter, rect)
+                
             painter.setPen(Qt.GlobalColor.white)
-            text_width = max(0, int(rect.width()) - 10)
-            text_cache_key = (seg.text, text_width)
-            display_text = self._segment_text_cache.get(text_cache_key)
-            if display_text is None:
-                display_text = fm.elidedText(seg.text, Qt.TextElideMode.ElideRight, text_width)
-                self._segment_text_cache[text_cache_key] = display_text
+            painter.setFont(QFont("Arial", 8))
             painter.drawText(
                 rect.adjusted(5, 0, -5, 0),
                 Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                display_text,
+                seg.text,
             )
-            # 애니메이션 배지 (파란 원형) — animation 설정된 세그먼트
-            anim = getattr(seg, "animation", None)
-            if anim is not None and anim.is_active and (x2 - x1) > 20:
-                badge_r = 5
-                bx = x2 - badge_r - 4
-                by = y + track_h - badge_r - 4
-                painter.save()
-                painter.setBrush(self._ANIMATION_BADGE_BRUSH)
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawEllipse(QRectF(bx - badge_r, by - badge_r, badge_r * 2, badge_r * 2))
-                painter.restore()
 
     # ---- Image Overlays ----
 
@@ -614,6 +518,7 @@ class TimelinePainter:
         ms_to_x = tw._ms_to_x
         widget_w = tw.width()
         sel_ov_idx = tw._selected_overlay_index
+        is_locked = tw._image_overlay_track.locked
         for i, ov in enumerate(tw._image_overlay_track):
             x1 = ms_to_x(ov.start_ms)
             x2 = ms_to_x(ov.end_ms)
@@ -630,9 +535,13 @@ class TimelinePainter:
                 painter.setPen(QPen(border_palette[color_idx], 1))
                 painter.setBrush(QBrush(palette[color_idx]))
             painter.drawRoundedRect(rect, 3, 3)
+            
+            if is_locked:
+                self._draw_lock_feedback(painter, rect)
+                
             if rect.width() > 30:
                 painter.setPen(QColor("white"))
-                painter.setFont(self._font_arial_8)
+                painter.setFont(QFont("Arial", 8))
                 text_rect = rect.adjusted(4, 2, -4, -2)
                 painter.drawText(
                     text_rect,
@@ -653,6 +562,7 @@ class TimelinePainter:
         text_h = tw._TEXT_ROW_H
         text_gap = tw._TEXT_ROW_GAP
         rows = tw._compute_text_overlay_rows()
+        is_locked = tw._text_overlay_track.locked
         for i, overlay in enumerate(tw._text_overlay_track.overlays):
             x1 = tw._ms_to_x(overlay.start_ms)
             x2 = tw._ms_to_x(overlay.end_ms)
@@ -668,9 +578,13 @@ class TimelinePainter:
                 painter.setPen(QPen(self._TEXT_OVERLAY_BORDER, 1))
                 painter.setBrush(QBrush(self._TEXT_OVERLAY_COLOR))
             painter.drawRoundedRect(rect, 3, 3)
+            
+            if is_locked:
+                self._draw_lock_feedback(painter, rect)
+                
             if rect.width() > 30:
                 painter.setPen(QColor("white"))
-                painter.setFont(self._font_arial_8)
+                painter.setFont(QFont("Arial", 8))
                 text_rect = rect.adjusted(4, 2, -4, -2)
                 display_text = overlay.text[:20] + "..." if len(overlay.text) > 20 else overlay.text
                 painter.drawText(
@@ -698,6 +612,7 @@ class TimelinePainter:
         track: AudioTrack = trackObject
         y = tw._bgm_track_y(track_idx)
         th = _BGM_H
+        is_locked = track.locked
         for i, clip in enumerate(track.clips):
             x1 = tw._ms_to_x(clip.start_ms)
             x2 = tw._ms_to_x(clip.start_ms + clip.duration_ms)
@@ -707,10 +622,7 @@ class TimelinePainter:
             gradient = QLinearGradient(rect.topLeft(), rect.bottomLeft())
             gradient.setColorAt(0, self._BGM_COLOR_TOP)
             gradient.setColorAt(1, self._BGM_COLOR_BOT)
-            is_selected = (
-                tw._selected_bgm_track_index == track_idx
-                and tw._selected_bgm_clip_index == i
-            )
+            is_selected = False # Future: implement BGM selection
             if is_selected:
                 painter.setPen(QPen(self._BGM_SELECTED_BORDER, 2))
                 painter.setBrush(QBrush(self._BGM_SELECTED_COLOR))
@@ -718,35 +630,19 @@ class TimelinePainter:
                 painter.setPen(QPen(self._BGM_BORDER, 1))
                 painter.setBrush(QBrush(gradient))
             painter.drawRoundedRect(rect, 4, 4)
+            
+            if is_locked:
+                self._draw_lock_feedback(painter, rect)
+                
             if rect.width() > 40:
                 painter.setPen(Qt.GlobalColor.white)
-                painter.setFont(self._font_arial_8)
+                painter.setFont(QFont("Arial", 8))
                 label = clip.source_path.name if clip.source_path else "BGM"
                 painter.drawText(
                     rect.adjusted(10, 2, -10, -2),
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                     label,
                 )
-
-    # ---- Markers ----
-
-    def _draw_markers(self, painter: QPainter, h: int) -> None:
-        """타임라인 마커 (수직선 + 이름 레이블)."""
-        tw = self.tw
-        if not tw._project or not tw._project.markers:
-            return
-        ms_to_x = tw._ms_to_x
-        painter.setFont(self._font_arial_8)
-        for marker in tw._project.markers:
-            x = ms_to_x(marker.ms)
-            if x < 0 or x > tw.width():
-                continue
-            color = self._MARKER_COLORS.get(marker.color, self._MARKER_COLORS["yellow"])
-            painter.setPen(QPen(color, 1, Qt.PenStyle.DashLine))
-            painter.drawLine(QLineF(x, _RULER_H, x, tw.height()))
-            if marker.name:
-                painter.setPen(color)
-                painter.drawText(QPointF(x + 3, _RULER_H + 12), marker.name)
 
     # ---- Playhead ----
 
@@ -777,22 +673,16 @@ class TimelinePainter:
         y = tw._video_track_y(track_idx)
         h = _CLIP_H
 
-        cache_key = (id(track), len(track.clips))
-        if cache_key != self._source_color_cache_key:
-            source_paths = {c.source_path for c in track.clips}
-            self._source_color_cache = {
-                path: i
-                for i, path in enumerate(
-                    sorted(source_paths, key=lambda x: str(x) if x is not None else "")
-                )
-            }
-            self._source_color_cache_key = cache_key
-        source_color_map = self._source_color_cache
+        source_paths = {c.source_path for c in track.clips}
+        source_color_map = {}
+        for i, path in enumerate(sorted(source_paths, key=lambda x: str(x) if x is not None else "")):
+            source_color_map[path] = i
 
         clip_starts = track.clip_boundaries_ms()
         # 로컬 변수 캐싱
         ms_to_x = tw._ms_to_x
-        selected_clips = tw._selected_clips
+        sel_track_idx = tw._selected_clip_track_index
+        sel_clip_idx = tw._selected_clip_index
         source_colors = self._SOURCE_COLORS
 
         for i, clip in enumerate(track.clips):
@@ -802,7 +692,7 @@ class TimelinePainter:
             if x2 < 0 or x1 > w:
                 continue
             rect = QRectF(x1, y, max(x2 - x1, 2), h)
-            is_selected = (track_idx, i) in selected_clips
+            is_selected = (sel_track_idx == track_idx and sel_clip_idx == i)
             if is_selected:
                 painter.setPen(QPen(self._CLIP_SELECTED_BORDER, 2))
                 glow_gradient = QLinearGradient(0, y, 0, y + h)
@@ -810,12 +700,8 @@ class TimelinePainter:
                 glow_gradient.setColorAt(1, self._CLIP_SELECTED_COLOR.darker(120))
                 painter.setBrush(QBrush(glow_gradient))
             else:
-                label = getattr(clip, "color_label", "none")
-                if label != "none" and label in self._LABEL_COLORS:
-                    c_top, c_bot, border_color = self._LABEL_COLORS[label]
-                else:
-                    color_idx = source_color_map.get(clip.source_path, 0) % len(source_colors)
-                    c_top, c_bot, border_color = source_colors[color_idx]
+                color_idx = source_color_map.get(clip.source_path, 0) % len(source_colors)
+                c_top, c_bot, border_color = source_colors[color_idx]
                 gradient = QLinearGradient(0, y, 0, y + h)
                 gradient.setColorAt(0, c_top)
                 gradient.setColorAt(1, c_bot)
@@ -865,29 +751,40 @@ class TimelinePainter:
                 label += f" ({clip.speed:.2f}x)"
             if rect.width() > 40:
                 painter.setPen(Qt.GlobalColor.white)
-                painter.setFont(self._font_arial_8)
+                painter.setFont(QFont("Arial", 8))
                 painter.drawText(
                     rect.adjusted(10, 2, -10, -2),
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                     label,
                 )
 
-            # 컬러 보정 인디케이터 (노란 원형 뱃지)
-            has_correction = (
-                clip.brightness != 1.0 or clip.contrast != 1.0 or clip.saturation != 1.0
-            )
-            if has_correction and (x2 - x1) > 20:
-                badge_r = 5
-                bx = x2 - badge_r - 4
-                by = y + h - badge_r - 4
-                painter.setBrush(self._CORRECTION_BADGE_BRUSH)
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawEllipse(QRectF(bx - badge_r, by - badge_r, badge_r * 2, badge_r * 2))
-
             # 볼륨 엔벨로프
             if hasattr(clip, "volume_points") and clip.volume_points:
                 self._draw_volume_envelope(painter, rect, clip)
                 self._draw_default_volume_line(painter, rect, clip)
+                
+            if track.locked:
+                self._draw_lock_feedback(painter, rect)
+
+    def _draw_lock_feedback(self, painter: QPainter, rect: QRectF) -> None:
+        """Draw a semi-transparent overlay and a small lock icon for locked tracks."""
+        painter.save()
+        painter.setBrush(QBrush(self._LOCKED_OVERLAY_COLOR))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(rect, 4, 4)
+        
+        # Draw a simple lock icon in the top-right
+        if rect.width() > 20:
+            icon_x = rect.right() - 15
+            icon_y = rect.top() + 5
+            painter.setPen(QPen(self._LOCKED_ICON_COLOR, 1.5))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            # Shackle
+            painter.drawArc(int(icon_x + 2), int(icon_y), 6, 6, 0, 180 * 16)
+            # Body
+            painter.setBrush(QBrush(self._LOCKED_ICON_COLOR))
+            painter.drawRect(int(icon_x), int(icon_y + 4), 10, 7)
+        painter.restore()
 
     def _draw_transition_marker(self, painter: QPainter, clip: VideoClip, rect: QRectF) -> None:
         """트랜지션 마커 그리기."""
@@ -911,7 +808,7 @@ class TimelinePainter:
 
             if marker_w > 15:
                 painter.setPen(Qt.GlobalColor.black)
-                painter.setFont(self._font_arial_7b)
+                painter.setFont(QFont("Arial", 7, QFont.Weight.Bold))
                 indicator = clip.transition_out.type[0].upper() if clip.transition_out.type else "T"
                 painter.drawText(marker_rect, Qt.AlignmentFlag.AlignCenter, indicator)
         finally:
