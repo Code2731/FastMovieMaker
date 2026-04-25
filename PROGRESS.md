@@ -4,9 +4,9 @@
 
 ## 현재 상태 및 미구현 사항
 
-**현재 상태:** Day 28 완료 (2026-03-01)
+**현재 상태:** Day 29 완료 (2026-04-25)
 
-**참고:** 가상환경 Python 3.13 사용 (3.9 호환성 고려 불필요)
+**참고:** MS Store Python 3.13 사용 (3.9 호환성 고려 불필요)
 
 ---
 
@@ -19,10 +19,26 @@
 | Phase 3: 타임라인 & 오디오 시각화 | 완료 |
 | Phase 4: 프로 워크플로우 (Step 1-2) | 완료 |
 | **Day 28: 트랙 관리 및 정합성 강화** | **완료** |
+| **Day 29: CPython 전환 안정화 및 버그 수정** | **완료** |
 
 ---
 
 ### 상세 진행 기록
+
+#### Day 29 (2026-04-25)
+- **타임라인 썸네일 미표시 근본 원인 수정**:
+    - `main_window._project`(초기 객체)와 `ctx.project`(로드 후 갱신 객체)가 분리되어 `_refresh_all_widgets`가 구 프로젝트로 타임라인을 덮어쓰던 버그 수정.
+    - `_refresh_all_widgets`, `_ensure_timeline_duration`, `_refresh_track_selector`, `_update_project_duration`에서 `self._ctx.project` 직접 참조로 변경.
+- **CPython(MS Store Python 3.13) 전환 후 테스트 실패 47개 전면 수정**:
+    - `commands.py`: `AutoAlignSubtitlesCommand.undo()` end_ms 미복원 버그 수정.
+    - `commands.py`: `EditColorCorrectionCommand`, `AddMarkerCommand`, `RemoveMarkerCommand`, `RenameMarkerCommand`, `ApplyTTSVerificationCommand` 5개 커맨드 클래스 추가.
+    - `clip_controller.py`: `on_delete_selected_clips()` 메서드 추가.
+    - `track_header_panel.py`: 상수 4개 추가, `SubtitleTrack` 빈 상태 falsy 버그 수정.
+    - `timeline_painter.py`: `_source_color_cache` 초기화 속성 추가.
+- **pytest 환경 안정화**:
+    - MS Store Python WinError 448(심볼릭링크 resolve 실패) 로 인한 pytest cleanup 크래시 수정 (`conftest.py` 패치).
+    - faster-whisper `model.bin` 0바이트(손상) 시 실제 모델 의존 테스트 skip 처리.
+- **결과**: 990 passed, 3 skipped, EXIT=0
 
 #### Day 28 (2026-03-01)
 - **트랙 관리 시스템 완성**:
