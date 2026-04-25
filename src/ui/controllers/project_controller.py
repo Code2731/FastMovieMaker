@@ -91,6 +91,7 @@ class ProjectController:
             ctx.refresh_all()
 
             if project.video_path and project.video_path.is_file():
+                ctx.timeline.set_primary_video_path(str(project.video_path))
                 ctx.current_playback_source = str(project.video_path)
                 ctx.current_clip_index = 0
                 ctx.player.setSource(QUrl.fromLocalFile(str(project.video_path)))
