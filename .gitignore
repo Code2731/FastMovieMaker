@@ -37,6 +37,9 @@ nul
 # Local app/runtime state
 .fastmoviemaker/
 
+# User project files
+*.fmm.json
+
 # Local agent/editor state
 .claude/settings.json
 
