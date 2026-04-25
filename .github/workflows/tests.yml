@@ -32,7 +32,7 @@ jobs:
           pip install -r requirements.txt pytest
 
       - name: Run test suite
-        run: pytest tests/ -q
+        run: pytest tests/ -q --tb=short
 
   apv-smoke:
     runs-on: ubuntu-latest
