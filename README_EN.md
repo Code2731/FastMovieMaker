@@ -12,9 +12,9 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 <div align="center">
-  <h2>🚀 Download v1.0.0</h2>
-  <a href="https://github.com/Code2731/FastMovieMaker/releases/latest"><img src="https://img.shields.io/badge/macOS-Download_.dmg-white?style=for-the-badge&logo=apple" alt="Download macOS"></a>
-  <a href="https://github.com/Code2731/FastMovieMaker/releases/latest"><img src="https://img.shields.io/badge/Windows-Download_.zip-blue?style=for-the-badge&logo=windows" alt="Download Windows"></a>
+  <h2><a href="https://github.com/Code2731/FastMovieMaker/releases/tag/v1.0.0">🚀 Download v1.0.0</a></h2>
+  <a href="https://github.com/Code2731/FastMovieMaker/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/macOS-Download_.dmg-white?style=for-the-badge&logo=apple" alt="Download macOS"></a>
+  <a href="https://github.com/Code2731/FastMovieMaker/releases/tag/v1.0.0"><img src="https://img.shields.io/badge/Windows-Download_.zip-blue?style=for-the-badge&logo=windows" alt="Download Windows"></a>
   <br>
   <sub>* Universal Binary for Apple Silicon (M1/M2/M3) and Intel Macs.</sub>
 </div>
